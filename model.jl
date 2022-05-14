@@ -231,9 +231,10 @@ function trim_to_index!(result::SolverResult, index)
     result.s = selectdim(result.s, 1, index)
     result.p = selectdim(result.p, 1, index)
     result.payoffs = selectdim(result.payoffs, 1, index)
+    return result
 end
 
-function prune_duplicates!(result::SolverResult, atol = 1e-6, rtol=1e-1)
+function prune_duplicates!(result::SolverResult; atol = 1e-6, rtol=1e-1)
     dups = Vector{Integer}()
     unique = Vector{Integer}()
     n_results = size(result.strats, 1)
@@ -295,6 +296,11 @@ function Base.:+(result1::SolverResult, result2::SolverResult)
     )
 end
 
+function get_null_result()
+    return SolverResult(
+        false, [NaN, NaN], [NaN], [NaN], [NaN]
+    )
+end
 
 function get_null_result(problem::Problem)
     return SolverResult(
@@ -322,11 +328,11 @@ function _solve_iters_single(problem::Problem, strat::Array)
     return new_strats
 end
     
-function solve_iters(problem::Problem, init_guess::Number = 1., max_iters::Integer = 100, iter_tol = 1e-8)
-    strat = fill(init_guess, (problem.n, 2))
+function solve_iters(problem::Problem, init_guess::Array; max_iters::Integer = 100, tol = 1e-8)
+    strat = init_guess
     for t in 1:max_iters
         new_strat = _solve_iters_single(problem, strat)
-        if maximum(abs.(new_strat - strat) ./ strat) < iter_tol
+        if maximum(abs.(new_strat - strat) ./ strat) < tol
             println("Exited on iteration ", t)
             return SolverResult(problem, true, new_strat)
         end
@@ -336,9 +342,13 @@ function solve_iters(problem::Problem, init_guess::Number = 1., max_iters::Integ
     return SolverResult(problem, false, strat)
 end
 
+function solve_iters(problem::Problem; init_guess::Number = 1., max_iters::Integer = 100, tol = 1e-8)
+    return solve_iters(problem, fill(init_guess, (problem.n, 2)); max_iters, tol)
+end
+
 
 function solve_roots(
-    problem::Problem,
+    problem::Problem;
     init_guesses::Vector{Float64} = [10.0^i for i in -5:5],
     # max_iters::Integer = 100, tol = 1e-8
 )
@@ -351,7 +361,7 @@ function solve_roots(
     end
     n_guesses = length(init_guesses)
     results = Array{Float64}(undef, n_guesses, problem.n, 2)
-    successes = fill(false, n_guesses)
+    successes = falses(n_guesses)
     for i in 1:n_guesses
         init_guess = fill(log(init_guesses[i]), problem.n * 2)
         res = nlsolve(
@@ -370,6 +380,29 @@ function solve_roots(
     results = results[successes, :, :]
     return SolverResult(problem, true, results)
 end
+
+
+function solve_hybrid(
+    problem::Problem;
+    init_guesses::Vector{Float64} = [10.0^i for i in -5:5],
+    max_iters::Integer = 100, tol = 1e-8
+)
+    roots_sol = solve_roots(problem, init_guesses)
+    if !roots_sol.success
+        return roots_sol
+    end
+    good_sols = Vector{SolverResult}()
+    strats = reshape(roots_sol.strats, :, problem.n, 2)  # just for if there's only one solution
+    for i in 1:size(strats)[1]
+        strats_ = copy(selectdim(strats, 1, i))
+        iter_sol = solve_iters(problem, strats_; max_iters, tol)
+        if iter_sol.success
+            push!(good_sols, iter_sol)
+        end
+    end
+    combined_sols = sum(good_sols)
+    prune_duplicates!(combined_sols)
+end
     
     
 function test()
@@ -377,8 +410,12 @@ function test()
     csf = CSF(1., 0., 0., 0.)
     problem = Problem([1., 1.], [0.01, 0.01], prodFunc, csf)
     # println(df(prodFunc, [1., 1.], [2., 2.]))
-    @time println("With `solve_iters`: ", solve_iters(problem))
-    @time println("With `solve_hybrid`: ", solve_hybrid(problem))
+    @time solve_iters_sol = solve_iters(problem)
+    @time solve_roots_sol = solve_roots(problem)
+    @time solve_hybrid_sol = solve_hybrid(problem)
+    println("With `solve_iters`: ", solve_iters_sol)
+    println("With `solve_roots`: ", solve_roots_sol)
+    println("With `solve_hybrid`: ", solve_hybrid_sol)
 end
     
     
