@@ -2,6 +2,12 @@ using Optim
 using NLsolve
 
 
+const DEFAULT_ITER_TOL = 1e-4
+const DEFAULT_ITER_MAX_ITERS = 100
+const DEFAULT_SOLVER_TOL = 1e-4
+const DEFAULT_SOLVER_MAX_ITERS = 200
+
+
 struct ProdFunc
     n::Integer
     A::Vector
@@ -217,8 +223,7 @@ end
 
 
 
-
-mutable struct SolverResult
+struct SolverResult
     success::Bool
     strats
     s
@@ -226,15 +231,20 @@ mutable struct SolverResult
     payoffs
 end
 
-function trim_to_index!(result::SolverResult, index)
-    result.strats = selectdim(result.strats, 1, index)
-    result.s = selectdim(result.s, 1, index)
-    result.p = selectdim(result.p, 1, index)
-    result.payoffs = selectdim(result.payoffs, 1, index)
-    return result
+function trim_to_index(result::SolverResult, index)
+    return SolverResult(
+        result.success,
+        selectdim(result.strats, 1, index),
+        selectdim(result.s, 1, index),
+        selectdim(result.p, 1, index),
+        selectdim(result.payoffs, 1, index)
+    )
 end
 
-function prune_duplicates!(result::SolverResult; atol = 1e-6, rtol=1e-1)
+function prune_duplicates(result::SolverResult; atol = 1e-6, rtol=1e-1)
+    if ndims(result.strats) < 3
+        return result
+    end
     dups = Vector{Integer}()
     unique = Vector{Integer}()
     n_results = size(result.strats, 1)
@@ -251,10 +261,10 @@ function prune_duplicates!(result::SolverResult; atol = 1e-6, rtol=1e-1)
         end
         push!(unique, i)
     end
-    trim_to_index!(result, unique)
+    return trim_to_index(result, unique)
 end
 
-function fill_from_problem!(problem::Problem, result::SolverResult)
+function fill_from_problem(problem::Problem, result::SolverResult)
     if ndims(result.strats) > 2
         strats = reshape(result.strats, :, problem.n, 2)
         new_s = similar(strats, size(strats)[1:2])
@@ -264,12 +274,23 @@ function fill_from_problem!(problem::Problem, result::SolverResult)
             (new_s[i, :], new_p[i, :]) = f(problem.prodFunc, strats[i, :, 1], strats[i, :, 2])
             new_payoffs[i, :] = all_payoffs_with_s_p(problem, strats[i, :, 1], strats[i, :, 2], new_s[i, :], new_p[i, :])
         end
-        copyto!(result.s, new_s)
-        copyto!(result.p, new_p)
-        copyto!(result.payoffs, new_payoffs)
+        return SolverResult(
+            result.success,
+            result.strats,
+            reshape(new_s, size(result.s)),
+            reshape(new_p, size(result.p)),
+            reshape(new_payoffs, size(result.payoffs))
+        )
     else
-        (result.s, result.p) = f(problem.prodFunc, result.strats[:, 1], result.strats[:, 2])
-        result.payoffs = all_payoffs_with_s_p(problem, result.strats[:, 1], result.strats[:, 2], result.s, result.p)
+        (new_s, new_p) = f(problem.prodFunc, result.strats[:, 1], result.strats[:, 2])
+        new_payoffs = all_payoffs_with_s_p(problem, result.strats[:, 1], result.strats[:, 2], new_s, new_p)
+        return SolverResult(
+            result.success,
+            result.strats,
+            new_s,
+            new_p,
+            new_payoffs
+        )
     end
 end
 
@@ -279,11 +300,12 @@ function SolverResult(problem::Problem, success::Bool, strats::Array, fill = tru
     p = similar(strats, first_dims)
     payoffs = similar(strats, first_dims)
     result = SolverResult(success, strats, s, p, payoffs)
-    prune_duplicates!(result)
+    result = prune_duplicates(result)
     if fill
-        fill_from_problem!(problem, result)
+        return fill_from_problem(problem, result)
+    else
+        return result
     end
-    return result
 end
 
 function Base.:+(result1::SolverResult, result2::SolverResult)
@@ -295,7 +317,7 @@ function Base.:+(result1::SolverResult, result2::SolverResult)
         cat(result1.payoffs, result2.payoffs, dims = 1)
     )
 end
-
+    
 function get_null_result()
     return SolverResult(
         false, [NaN, NaN], [NaN], [NaN], [NaN]
@@ -311,66 +333,116 @@ function get_null_result(problem::Problem)
         fill(NaN, problem.n)
     )
 end
-        
-function _solve_iters_single(problem::Problem, strat::Array)
+
+function resolve_multiple_solutions(
+    result::SolverResult,
+    problem::Problem
+)
+    if ndims(result.strats) == 2
+        return result
+    elseif size(result.strats)[1] == 1
+        return trim_to_index(result, 1)
+    end
+
+    argmaxes = [x[1] for x in argmax(result.payoffs, dims=1)]
+    best = argmaxes[1]
+    if any(best .!= argmaxes[2:length(argmaxes)])
+        println("More than one result found; equilibrium is ambiguous")
+        return get_null_result(problem)
+    end
+    
+    return trim_to_index(result, best)
+end
+
+
+function solve_iters_single(problem::Problem, strat::Array)
     new_strats = similar(strat, (problem.n, 2))
-    for i in 1:problem.n
+    Threads.@threads for i in 1:problem.n
         obj = get_func(problem, i, strat)
         jac! = get_jac(problem, i, strat)
         lower_bound = [0., 0.]
         upper_bound = [Inf, Inf]
         init_guess = strat[i, :]
         res = optimize(
-            obj, jac!, lower_bound, upper_bound, init_guess, Fminbox(BFGS())
+            obj, jac!,
+            lower_bound, upper_bound,
+            init_guess,
+            Fminbox(LBFGS()),
+            Optim.Options(
+                x_tol = DEFAULT_SOLVER_TOL,
+                iterations = DEFAULT_SOLVER_MAX_ITERS
+            )
         )
         new_strats[i, :] = Optim.minimizer(res)
     end
     return new_strats
 end
     
-function solve_iters(problem::Problem, init_guess::Array; max_iters::Integer = 100, tol = 1e-8)
+function solve_iters(
+    problem::Problem,
+    init_guess::Array;
+    max_iters = DEFAULT_ITER_MAX_ITERS,
+    tol = DEFAULT_ITER_TOL,
+    verbose = true
+)
     strat = init_guess
     for t in 1:max_iters
-        new_strat = _solve_iters_single(problem, strat)
+        new_strat = solve_iters_single(problem, strat)
         if maximum(abs.(new_strat - strat) ./ strat) < tol
-            println("Exited on iteration ", t)
+            if verbose
+                println("Exited on iteration ", t)
+            end
             return SolverResult(problem, true, new_strat)
         end
         strat = new_strat
     end
-    println("Reached max iterations")
+    if verbose
+        println("Reached max iterations")
+    end
     return SolverResult(problem, false, strat)
 end
 
-function solve_iters(problem::Problem; init_guess::Number = 1., max_iters::Integer = 100, tol = 1e-8)
-    return solve_iters(problem, fill(init_guess, (problem.n, 2)); max_iters, tol)
+function solve_iters(
+    problem::Problem;
+    init_guess::Number = 1.,
+    max_iters = DEFAULT_ITER_MAX_ITERS,
+    tol = DEFAULT_ITER_TOL,
+    verbose = true
+)
+    return solve_iters(problem, fill(init_guess, (problem.n, 2)); max_iters, tol, verbose)
 end
 
 
 function solve_roots(
     problem::Problem;
     init_guesses::Vector{Float64} = [10.0^i for i in -5:5],
-    # max_iters::Integer = 100, tol = 1e-8
+    resolve_multiple = true
 )
     jac! = get_jac(problem)
     function obj!(val, x)
-        # reshape x and transform to positive value
-        y = exp.(reshape(x, (problem.n, 2)))
-        # fill jacobian at y
-        jac!(val, y)
+        # reshape x to block format as expected by jac! function
+        y = reshape(x, (problem.n, 2))
+        if any(y .< 0.)
+            # stop negative inputs here so they don't throw domain error
+            fill!(val, NaN)
+        else
+            # fill jacobian at y
+            jac!(val, y)
+        end
     end
     n_guesses = length(init_guesses)
     results = Array{Float64}(undef, n_guesses, problem.n, 2)
     successes = falses(n_guesses)
-    for i in 1:n_guesses
-        init_guess = fill(log(init_guesses[i]), problem.n * 2)
+    Threads.@threads for i in 1:n_guesses
+        init_guess = fill(init_guesses[i], problem.n * 2)
         res = nlsolve(
             obj!,
-            init_guess
+            init_guess,
+            method = :trust_region
         )
         if res.f_converged
             successes[i] = true
-            results[i, :, :] = exp.(reshape(res.zero, (problem.n, 2)))
+            results[i, :, :] = reshape(res.zero, (problem.n, 2))
         end
     end
     if !any(successes)
@@ -378,30 +450,42 @@ function solve_roots(
         return get_null_result(problem)
     end
     results = results[successes, :, :]
-    return SolverResult(problem, true, results)
+    solverResult = SolverResult(problem, true, results)
+    if resolve_multiple
+        return resolve_multiple_solutions(solverResult, problem)
+    else
+        return solverResult
+    end
 end
 
 
 function solve_hybrid(
     problem::Problem;
     init_guesses::Vector{Float64} = [10.0^i for i in -5:5],
-    max_iters::Integer = 100, tol = 1e-8
+    max_iters = DEFAULT_ITER_MAX_ITERS, tol = DEFAULT_ITER_TOL,
+    verbose = false
 )
-    roots_sol = solve_roots(problem, init_guesses)
+    if verbose
+        println("Finding roots...")
+    end
+    roots_sol = solve_roots(problem, init_guesses = init_guesses, resolve_multiple = false)
     if !roots_sol.success
         return roots_sol
     end
-    good_sols = Vector{SolverResult}()
+    good_sols = SolverResult[]
     strats = reshape(roots_sol.strats, :, problem.n, 2)  # just for if there's only one solution
-    for i in 1:size(strats)[1]
+    if verbose
+        println("Iterating...")
+    end
+    Threads.@threads for i in 1:size(strats)[1]
         strats_ = copy(selectdim(strats, 1, i))
-        iter_sol = solve_iters(problem, strats_; max_iters, tol)
+        iter_sol = solve_iters(problem, strats_; max_iters, tol, verbose)
         if iter_sol.success
             push!(good_sols, iter_sol)
         end
     end
     combined_sols = sum(good_sols)
-    prune_duplicates!(combined_sols)
+    return resolve_multiple_solutions(prune_duplicates(combined_sols), problem)
 end
     
     
