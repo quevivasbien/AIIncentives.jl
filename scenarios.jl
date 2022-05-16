@@ -28,10 +28,9 @@ Scenario(
     secondary_varying_param = nothing
 ) = Scenario(n_players, A, α, B, β, θ, d, r, w, l, a_w, a_l, varying_param, secondary_varying_param)
 
-function get_values_for_plot(results::Array{SolverResult})
+function get_values_for_plot(results::Array)
     n_steps = length(results)
     n_players = size(results[1].strats)[1]
-    # strats = similar(results[1].strats, n, n_players, 2)
     s = similar(results[1].s, n_steps, n_players)
     p = similar(results[1].p, n_steps, n_players)
     payoffs = similar(results[1].payoffs, n_steps, n_players)
@@ -44,7 +43,7 @@ function get_values_for_plot(results::Array{SolverResult})
     return s, p, total_safety, payoffs
 end
 
-function create_plot(results::Array{SolverResult}, xaxis, xlabel, plotname, labels, title, logscale)
+function create_plot(results::Array, xaxis, xlabel, plotname, labels, title, logscale)
     (s, p, total_safety, payoffs) = get_values_for_plot(results)
     perf_plt = plot(xaxis, p, xlabel = xlabel, ylabel = "performance")
     safety_plt = plot(xaxis, s, xlabel = xlabel, ylabel = "safety")
@@ -136,32 +135,28 @@ function solve(
         end
     end
 
-    results = SolverResult[]
+    results = Array{Any}(nothing, n_steps)
     csf = CSF(scenario.w, scenario.l, scenario.a_w, scenario.a_l)
     # send to solver
     Threads.@threads for i in 1:n_steps
         prodFunc = ProdFunc(A[:, i], α[:, i], B[:, i], β[:, i], θ[:, i])
         problem = Problem(d[:, i], r[:, i],  prodFunc, csf)
         if solve_method == :iters
-            push!(
-                results,
-                solve_iters(problem, max_iters = max_iters, tol = tol, verbose = verbose)
+            results[i] = solve_iters(
+                problem,
+                max_iters = max_iters,
+                tol = tol,
+                verbose = verbose
             )
         elseif solve_method == :roots
-            push!(
-                results,
-                solve_roots(problem)
-            )
+            results[i] = solve_roots(problem)
         else
             # implicitly solve_method == :hybrid by default
-            push!(
-                results,
-                solve_hybrid(
-                    problem,
-                    max_iters = max_iters,
-                    tol = tol,
-                    verbose = verbose
-                )
+            results[i] = solve_hybrid(
+                problem,
+                max_iters = max_iters,
+                tol = tol,
+                verbose = verbose
             )
         end
     end
@@ -184,7 +179,7 @@ function test(solve_method = :hybrid)
     β = [0.5, 0.5]
     θ = [0.5, 0.5]
     d = [1., 1.]
-    r = linspace(0.01, 0.1, 20, 2)
+    r = linspace(0.01, 0.1, Threads.nthreads(), 2)
 
     scenario = Scenario(2, A, α, B, β, θ, d, r)
 

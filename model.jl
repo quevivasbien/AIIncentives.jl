@@ -1,11 +1,12 @@
 using Optim
 using NLsolve
+# using SciPy
 
 
-const DEFAULT_ITER_TOL = 1e-4
+const DEFAULT_ITER_TOL = 1e-6
 const DEFAULT_ITER_MAX_ITERS = 100
-const DEFAULT_SOLVER_TOL = 1e-4
-const DEFAULT_SOLVER_MAX_ITERS = 200
+const DEFAULT_SOLVER_TOL = 1e-6
+const DEFAULT_SOLVER_MAX_ITERS = 100
 
 
 struct ProdFunc
@@ -203,22 +204,37 @@ function get_func(problem::Problem, i::Integer, strats::Array)
     end
 end
 
-function get_jac(problem::Problem, i::Integer, strats::Array)
+function get_jac(problem::Problem, i::Integer, strats::Array; inplace = false)
     # returns gradient of player i's payoff given other players' strats
     strats_ = copy(strats)
-    function jac!(grad, x)
-        strats_[i, :] = x
-        copy!(grad, -payoff_deriv(problem, i, strats_[:, 1], strats_[:, 2]))
+    if inplace
+        function jac!(grad, x)
+            strats_[i, :] = x
+            copy!(grad, -payoff_deriv(problem, i, strats_[:, 1], strats_[:, 2]))
+        end
+        return jac!
+    else
+        function jac(x)
+            strats_[i, :] = x
+            return -payoff_deriv(problem, i, strats_[:, 1], strats_[:, 2])
+        end
+        return jac
     end
-    return jac!
 end
 
-function get_jac(problem::Problem)
+function get_jac(problem::Problem; inplace = false)
     # returns flat jacobian of all players' payoffs
-    function jac!(grad, x)
-        copy!(grad, -all_payoffs_deriv_flat(problem, x[:, 1], x[:, 2]))
+    if inplace
+        function jac!(grad, x)
+            copy!(grad, -all_payoffs_deriv_flat(problem, x[:, 1], x[:, 2]))
+        end
+        return jac!
+    else
+        function jac(x)
+            return -all_payoffs_deriv_flat(problem, x[:, 1], x[:, 2])
+        end
+        return jac
     end
-    return jac!
 end
 
 
@@ -308,6 +324,16 @@ function SolverResult(problem::Problem, success::Bool, strats::Array, fill = tru
     end
 end
 
+function make_3d(result::SolverResult, n)
+    return SolverResult(
+        result.success,
+        reshape(result.strats, :, n, 2),
+        reshape(result.s, :, n),
+        reshape(result.p, :, n),
+        reshape(result.payoffs, :, n)
+    )
+end
+
 function Base.:+(result1::SolverResult, result2::SolverResult)
     return SolverResult(
         result1.success && result2.success,
@@ -338,6 +364,7 @@ function resolve_multiple_solutions(
     result::SolverResult,
     problem::Problem
 )
+    println("Before resolving: ", result.strats)
     if ndims(result.strats) == 2
         return result
     elseif size(result.strats)[1] == 1
@@ -346,7 +373,7 @@ function resolve_multiple_solutions(
 
     argmaxes = [x[1] for x in argmax(result.payoffs, dims=1)]
     best = argmaxes[1]
-    if any(best .!= argmaxes[2:length(argmaxes)])
+    if any(best .!= argmaxes[2:end])
         println("More than one result found; equilibrium is ambiguous")
         return get_null_result(problem)
     end
@@ -357,23 +384,25 @@ end
 
 function solve_iters_single(problem::Problem, strat::Array)
     new_strats = similar(strat, (problem.n, 2))
-    Threads.@threads for i in 1:problem.n
+    for i in 1:problem.n
         obj = get_func(problem, i, strat)
-        jac! = get_jac(problem, i, strat)
-        lower_bound = [0., 0.]
-        upper_bound = [Inf, Inf]
+        obj_(x) = obj(exp.(x))
+        jac! = get_jac(problem, i, strat, inplace = true)
+        jac_!(var, x) = jac!(var, exp.(x))
+        # lower_bound = [0., 0.]
+        # upper_bound = [Inf, Inf]
         init_guess = strat[i, :]
         res = optimize(
-            obj, jac!,
-            lower_bound, upper_bound,
-            init_guess,
-            Fminbox(LBFGS()),
+            obj_, jac_!,
+            # lower_bound, upper_bound,
+            log.(init_guess),
+            NewtonTrustRegion(),
             Optim.Options(
                 x_tol = DEFAULT_SOLVER_TOL,
                 iterations = DEFAULT_SOLVER_MAX_ITERS
             )
         )
-        new_strats[i, :] = Optim.minimizer(res)
+        new_strats[i, :] = exp.(Optim.minimizer(res))
     end
     return new_strats
 end
@@ -418,17 +447,13 @@ function solve_roots(
     init_guesses::Vector{Float64} = [10.0^i for i in -5:5],
     resolve_multiple = true
 )
-    jac! = get_jac(problem)
+    jac! = get_jac(problem, inplace = true)
     function obj!(val, x)
         # reshape x to block format as expected by jac! function
-        y = reshape(x, (problem.n, 2))
-        if any(y .< 0.)
-            # stop negative inputs here so they don't throw domain error
-            fill!(val, NaN)
-        else
-            # fill jacobian at y
-            jac!(val, y)
-        end
+        # also take exponential to force positive bounds
+        y = reshape(exp.(x), (problem.n, 2))
+        # fill jacobian at y
+        jac!(val, y)
     end
     n_guesses = length(init_guesses)
     results = Array{Float64}(undef, n_guesses, problem.n, 2)
@@ -437,12 +462,12 @@ function solve_roots(
         init_guess = fill(init_guesses[i], problem.n * 2)
         res = nlsolve(
             obj!,
-            init_guess,
-            method = :trust_region
+            log.(init_guess),
+            method = :trust_region  # this is just the default
         )
         if res.f_converged
             successes[i] = true
-            results[i, :, :] = reshape(res.zero, (problem.n, 2))
+            results[i, :, :] = reshape(exp.(res.zero), (problem.n, 2))
         end
     end
     if !any(successes)
@@ -474,6 +499,7 @@ function solve_hybrid(
     end
     good_sols = SolverResult[]
     strats = reshape(roots_sol.strats, :, problem.n, 2)  # just for if there's only one solution
+    println("Before iterating: ", strats)
     if verbose
         println("Iterating...")
     end
@@ -484,7 +510,9 @@ function solve_hybrid(
             push!(good_sols, iter_sol)
         end
     end
-    combined_sols = sum(good_sols)
+    println("good_sols: ", good_sols)
+    combined_sols = sum([make_3d(r, problem.n) for r in good_sols])
+    println("combined_sols: ", combined_sols)
     return resolve_multiple_solutions(prune_duplicates(combined_sols), problem)
 end
     
@@ -493,7 +521,6 @@ function test()
     prodFunc = ProdFunc([10., 10.], [0.5, 0.5], [10., 10.], [0.5, 0.5], [0., 0.])
     csf = CSF(1., 0., 0., 0.)
     problem = Problem([1., 1.], [0.01, 0.01], prodFunc, csf)
-    # println(df(prodFunc, [1., 1.], [2., 2.]))
     @time solve_iters_sol = solve_iters(problem)
     @time solve_roots_sol = solve_roots(problem)
     @time solve_hybrid_sol = solve_hybrid(problem)
