@@ -1,6 +1,5 @@
 using Optim
 using NLsolve
-# using SciPy
 
 
 const DEFAULT_ITER_TOL = 1e-6
@@ -364,7 +363,6 @@ function resolve_multiple_solutions(
     result::SolverResult,
     problem::Problem
 )
-    println("Before resolving: ", result.strats)
     if ndims(result.strats) == 2
         return result
     elseif size(result.strats)[1] == 1
@@ -499,7 +497,6 @@ function solve_hybrid(
     end
     good_sols = SolverResult[]
     strats = reshape(roots_sol.strats, :, problem.n, 2)  # just for if there's only one solution
-    println("Before iterating: ", strats)
     if verbose
         println("Iterating...")
     end
@@ -510,9 +507,7 @@ function solve_hybrid(
             push!(good_sols, iter_sol)
         end
     end
-    println("good_sols: ", good_sols)
     combined_sols = sum([make_3d(r, problem.n) for r in good_sols])
-    println("combined_sols: ", combined_sols)
     return resolve_multiple_solutions(prune_duplicates(combined_sols), problem)
 end
     
