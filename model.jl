@@ -6,7 +6,7 @@ const DEFAULT_ITER_TOL = 1e-6
 const DEFAULT_ITER_MAX_ITERS = 100
 const DEFAULT_SOLVER_TOL = 1e-6
 const DEFAULT_SOLVER_MAX_ITERS = 100
-
+const EPSILON = 1e-8
 
 struct ProdFunc
     n::Integer
@@ -60,6 +60,15 @@ function df(prodFunc::ProdFunc, Xs::Vector, Xp::Vector)
     return df_from_s_p(prodFunc, s, p)
 end
 
+function get_total_safety(s::Array)
+    println("s: ", s)
+    probas = s ./ (1. .+ s)
+    # if s is infinite, proba should be 1
+    probas[isnan.(probas)] .= 1.
+    out = prod(probas, dims = ndims(s))
+    println("total_safety: ", out)
+    return out
+end
 
 
 struct CSF
@@ -70,15 +79,25 @@ struct CSF
 end
 
 function reward(csf::CSF, i::Integer, p::Vector)
-    win_proba = p[i] / sum(p)
+    sum_ = sum(p)
+    if sum_ == 0.
+        # win_proba = 1 / n
+        return (csf.w + csf.l) / length(p)
+    end
+    win_proba = p[i] / sum_
     return (
-        (csf.w .+ p[i] .* csf.a_w) .* win_proba
-        .+ (csf.l .+ p[i] .* csf.a_l) .* (1. .- win_proba)
+        (csf.w + p[i] * csf.a_w) * win_proba
+        + (csf.l + p[i] * csf.a_l) * (1. - win_proba)
     )
 end
 
 function all_rewards(csf::CSF, p::Vector)
-    win_probas = p ./ sum(p)
+    sum_ = sum(p)
+    if sum_ == 0.
+        # win_probas = [1/n, ..., 1/n]
+        return fill((csf.w + csf.l) / length(p), length(p))
+    end
+    win_probas = p ./ sum_
     return (
         (csf.w .+ p .* csf.a_w) .* win_probas
         .+ (csf.l .+ p .* csf.a_l) .* (1. .- win_probas)
@@ -87,6 +106,9 @@ end
 
 function reward_deriv(csf::CSF, i::Integer, p::Vector)
     sum_ = sum(p)
+    if sum_ == 0.
+        return Inf
+    end
     win_proba = p[i] / sum_
     win_proba_deriv = (sum_ .- p[i]) ./ sum_.^2
     return (
@@ -97,6 +119,9 @@ end
 
 function all_reward_derivs(csf::CSF, p::Vector)
     sum_ = sum(p)
+    if sum_ == 0.
+        return fill(Inf, length(p))
+    end
     win_probas = p ./ sum_
     win_proba_derivs = (sum_ .- p) ./ sum_.^2
     return (
@@ -107,6 +132,9 @@ end
 
 function reward_and_deriv(csf::CSF, i::Integer, p::Vector)
     sum_ = sum(p)
+    if sum_ == 0.
+        return ((csf.w + csf.l) / length(p), Inf)
+    end
     win_proba = p[i] ./ sum_
     win_proba_deriv = (sum_ .- p[i]) ./ sum_.^2
     reward = (csf.w + p[i] * csf.a_w) * win_proba + (csf.l + p[i] * csf.a_l) * (1. - win_proba)
@@ -119,6 +147,9 @@ end
 
 function all_rewards_and_derivs(csf::CSF, p::Vector)
     sum_ = sum(p)
+    if sum_ == 0.
+        return (fill((csf.w + csf.l) / length(p), length(p)), fill(Inf, length(p)))
+    end
     win_probas = p ./ sum_
     win_proba_derivs = (sum_ .- p) ./ sum_.^2
     rewards = (csf.w .+ p .* csf.a_w) .* win_probas .+ (csf.l .+ p .* csf.a_l) .* (1. .- win_probas)
@@ -342,20 +373,14 @@ function Base.:+(result1::SolverResult, result2::SolverResult)
         cat(result1.payoffs, result2.payoffs, dims = 1)
     )
 end
-    
-function get_null_result()
-    return SolverResult(
-        false, [NaN, NaN], [NaN], [NaN], [NaN]
-    )
-end
 
-function get_null_result(problem::Problem)
+function get_null_result(n)
     return SolverResult(
         false,
-        fill(NaN, problem.n),
-        fill(NaN, problem.n),
-        fill(NaN, problem.n),
-        fill(NaN, problem.n)
+        fill(NaN, 1, n, 2),
+        fill(NaN, 1, n),
+        fill(NaN, 1, n),
+        fill(NaN, 1, n)
     )
 end
 
@@ -400,7 +425,20 @@ function solve_iters_single(problem::Problem, strat::Array)
                 iterations = DEFAULT_SOLVER_MAX_ITERS
             )
         )
-        new_strats[i, :] = exp.(Optim.minimizer(res))
+        if any(problem.prodFunc.θ .> 0.)
+            # check the zero-input payoff
+            x = copy(strat)
+            x[i, :] = [0., 0.]
+            (_, p) = f(problem.prodFunc, x[:, 1], x[:, 2])
+            zero_payoff = reward(problem.csf, i, p)
+            if zero_payoff > -Optim.minimum(res)
+                new_strats[i, :] = [0., 0.]
+            else
+                new_strats[i, :] = exp.(Optim.minimizer(res))
+            end
+        else
+            new_strats[i, :] = exp.(Optim.minimizer(res))
+        end
     end
     return new_strats
 end
@@ -415,7 +453,7 @@ function solve_iters(
     strat = init_guess
     for t in 1:max_iters
         new_strat = solve_iters_single(problem, strat)
-        if maximum(abs.(new_strat - strat) ./ strat) < tol
+        if maximum(abs.(new_strat - strat) ./ (strat .+ EPSILON)) < tol
             if verbose
                 println("Exited on iteration ", t)
             end
@@ -495,19 +533,25 @@ function solve_hybrid(
     if !roots_sol.success
         return roots_sol
     end
-    good_sols = SolverResult[]
     strats = reshape(roots_sol.strats, :, problem.n, 2)  # just for if there's only one solution
+    n_tries = size(strats)[1]
+    converged = falses(n_tries)
+    results = Vector{SolverResult}(undef, n_tries)
     if verbose
         println("Iterating...")
     end
-    Threads.@threads for i in 1:size(strats)[1]
+    Threads.@threads for i in 1:n_tries
         strats_ = copy(selectdim(strats, 1, i))
         iter_sol = solve_iters(problem, strats_; max_iters, tol, verbose)
         if iter_sol.success
-            push!(good_sols, iter_sol)
+            converged[i] = true
+            results[i] = iter_sol
         end
     end
-    combined_sols = sum([make_3d(r, problem.n) for r in good_sols])
+    if !any(converged)
+        return get_null_result(problem)
+    end
+    combined_sols = sum([make_3d(r, problem.n) for (r, c) in zip(results, converged) if c])
     return resolve_multiple_solutions(prune_duplicates(combined_sols), problem)
 end
     

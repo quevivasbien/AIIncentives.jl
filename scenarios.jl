@@ -36,7 +36,7 @@ function get_values_for_plot(results::Array{SolverResult, 1})
         p[i, :] = r.p
         payoffs[i, :] = r.payoffs
     end
-    total_safety = prod(s ./ (1. .+ s), dims = 2)
+    total_safety = get_total_safety(s)
     return s, p, total_safety, payoffs
 end
 
@@ -79,7 +79,7 @@ function get_values_for_plot(results::Array{SolverResult, 2})
             payoffs[i, j, :] = results[i, j].payoffs
         end
     end
-    total_safety = prod(s ./ (1. .+ s), dims = 3)
+    total_safety = get_total_safety(s)
     return s, p, total_safety, payoffs
 end
 
