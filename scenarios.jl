@@ -49,8 +49,8 @@ function create_plot(results::Array{SolverResult, 1}, xaxis, xlabel, plotname, l
         yaxis!(perf_plt, :log10)
         yaxis!(safety_plt, :log10)
     end
-    total_safety_plt = plot(xaxis, total_safety, xlabel = xlabel, ylabel = "σ", labels = labels_)
-    payoff_plt = plot(xaxis, payoffs, xlabel = xlabel, ylabel = "payoff", label = nothing)
+    total_safety_plt = plot(xaxis, total_safety, xlabel = xlabel, ylabel = "σ", label = nothing)
+    payoff_plt = plot(xaxis, payoffs, xlabel = xlabel, ylabel = "payoff", labels = labels_)
     plot(
         perf_plt, safety_plt, total_safety_plt, payoff_plt,
         layout = (2, 2), size = (1200, 800), legend_font_pointsize = 6
@@ -58,9 +58,8 @@ function create_plot(results::Array{SolverResult, 1}, xaxis, xlabel, plotname, l
     if title != nothing
         title!(title)
     end
-    Plots.labels!(labels)
     if plotname != nothing
-        Plots.savefig(join([plotname, ".png"]))
+        Plots.savefig("$(plotname).png")
     else
         gui()
     end
@@ -86,13 +85,13 @@ end
 function create_plot(results::Array{SolverResult, 2}, xaxis, xlabel, plotname, labels, title, logscale)
     (s, p, total_safety, payoffs) = get_values_for_plot(results)
     (n_steps_secondary, _, n_players) = size(s)
-    labels1 = reshape([join([labels[1], ", Player ", i]) for i in 1:n_players], 1, :)
+    labels1 = reshape(["$(labels[1]), player $i" for i in 1:n_players], 1, :)
     perf_plt = plot(xaxis, p[1, :, :], xlabel = xlabel, ylabel = "performance", labels = labels1)
     safety_plt = plot(xaxis, s[1, :, :], xlabel = xlabel, ylabel = "safety", labels = labels1)
     total_safety_plt = plot(xaxis, total_safety[1, :], xlabel = xlabel, ylabel = "σ", label = labels[1])
     payoff_plt = plot(xaxis, payoffs[1, :, :], xlabel = xlabel, ylabel = "payoff", labels = labels1)
     for i in 2:n_steps_secondary
-        labelsi = reshape([join([labels[j], ", Player ", j]) for j in 1:n_players], 1, :)
+        labelsi = reshape(["$(labels[i]), player $j" for j in 1:n_players], 1, :)
         plot!(perf_plt, xaxis, p[i, :, :], labels = labelsi)
         plot!(safety_plt, xaxis, s[i, :, :], labels = labelsi)
         plot!(total_safety_plt, xaxis, total_safety[i, :], label = labels[i])
@@ -110,7 +109,7 @@ function create_plot(results::Array{SolverResult, 2}, xaxis, xlabel, plotname, l
         title!(title)
     end
     if plotname != nothing
-        Plots.savefig(join([plotname, ".png"]))
+        Plots.savefig("$(plotname).png")
     else
         gui()
     end
@@ -155,7 +154,8 @@ function solve_with_secondary_variation(
     tol,
     verbose
 )
-    varying_param = getfield(scenario, scenario.varying_param)
+    varying_param_ = getfield(scenario, scenario.varying_param)
+    varying_param = size(varying_param_)[1] == 1 ? repeat(varying_param_, scenario.n_players) : varying_param_
     n_steps = size(varying_param)[2]
     secondary_varying_param = getfield(scenario, scenario.secondary_varying_param)
     n_steps_secondary = size(secondary_varying_param)[2]
@@ -169,18 +169,18 @@ function solve_with_secondary_variation(
     d = similar(scenario.d, (scenario.n_players, n_steps, n_steps_secondary))
     r = similar(scenario.r, (scenario.n_players, n_steps, n_steps_secondary))
     for (newvar, symbol) in zip((A, α, B, β, θ, d, r), (:A, :α, :B, :β, :θ, :d, :r))
-        var = getfield(scenario, symbol)
         if symbol == scenario.varying_param
             copyto!(
                 newvar,
-                repeat(var, outer = (1, n_steps_secondary))
+                repeat(varying_param, outer = (1, n_steps_secondary))
             )
         elseif symbol == scenario.secondary_varying_param
             copyto!(
                 newvar,
-                repeat(var, inner = (1, n_steps))
+                repeat(secondary_varying_param, inner = (1, n_steps))
             )
         else
+            var = getfield(scenario, symbol)
             copyto!(
                 newvar,
                 repeat(var, inner = (1, n_steps), outer = (1, n_steps_secondary))
@@ -198,8 +198,7 @@ function solve_with_secondary_variation(
 
     if makeplot
         xaxis = varying_param[1, :] == varying_param[2, :] ? varying_param[1, :] : 1:n_steps
-        labels = [join([scenario.secondary_varying_param, " = ", string(secondary_varying_param[:, i])]) for i in 1:n_steps_secondary]
-        println("labels: ", labels)
+        labels = ["$(scenario.secondary_varying_param) = $(secondary_varying_param[:, i])" for i in 1:n_steps_secondary]
         create_plot(
             results,
             xaxis,
@@ -213,6 +212,7 @@ function solve_with_secondary_variation(
 
     return results
 end
+
 
 function solve(
     scenario::Scenario;
@@ -239,7 +239,8 @@ function solve(
         )
     end
 
-    varying_param = getfield(scenario, scenario.varying_param)
+    varying_param_ = getfield(scenario, scenario.varying_param)
+    varying_param = size(varying_param_)[1] == 1 ? repeat(varying_param_, scenario.n_players) : varying_param_
     n_steps = size(varying_param)[2]
     
     A = similar(scenario.A, (scenario.n_players, n_steps))
@@ -253,10 +254,10 @@ function solve(
     # create stacks of variables to send to solver
     # everything needs to have shape n_players x n_steps
     for (newvar, symbol) in zip((A, α, B, β, θ, d, r), (:A, :α, :B, :β, :θ, :d, :r))
-        var = getfield(scenario, symbol)
         if symbol == scenario.varying_param
-            copy!(newvar, var)
+            copy!(newvar, varying_param)
         else
+            var = getfield(scenario, symbol)
             copy!(
                 newvar,
                 reshape(
@@ -279,7 +280,7 @@ function solve(
 
     if makeplot
         xaxis = varying_param[1, :] == varying_param[2, :] ? varying_param[1, :] : 1:n_steps
-        labels = [join(["player ", i]) for i in 1:n_steps]
+        labels = ["player $i" for i in 1:n_steps]
         create_plot(results, xaxis, scenario.varying_param, plotname, labels, title, logscale)
     end
 

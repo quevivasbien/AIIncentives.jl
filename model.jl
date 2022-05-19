@@ -6,6 +6,7 @@ const DEFAULT_ITER_TOL = 1e-6
 const DEFAULT_ITER_MAX_ITERS = 100
 const DEFAULT_SOLVER_TOL = 1e-6
 const DEFAULT_SOLVER_MAX_ITERS = 100
+const EPSILON = 1e-4
 
 
 struct ProdFunc
@@ -70,7 +71,8 @@ struct CSF
 end
 
 function reward(csf::CSF, i::Integer, p::Vector)
-    win_proba = p[i] / sum(p)
+    sum_ = sum(p)
+    win_proba = sum_ > EPSILON ? p[i] / sum_ : 0.5
     return (
         (csf.w .+ p[i] .* csf.a_w) .* win_proba
         .+ (csf.l .+ p[i] .* csf.a_l) .* (1. .- win_proba)
@@ -78,7 +80,8 @@ function reward(csf::CSF, i::Integer, p::Vector)
 end
 
 function all_rewards(csf::CSF, p::Vector)
-    win_probas = p ./ sum(p)
+    sum_ = sum(p)
+    win_probas = sum_ > EPSILON ? p ./ sum(p) : fill(0.5, size(p))
     return (
         (csf.w .+ p .* csf.a_w) .* win_probas
         .+ (csf.l .+ p .* csf.a_l) .* (1. .- win_probas)
@@ -87,8 +90,8 @@ end
 
 function reward_deriv(csf::CSF, i::Integer, p::Vector)
     sum_ = sum(p)
-    win_proba = p[i] / sum_
-    win_proba_deriv = (sum_ .- p[i]) ./ sum_.^2
+    win_proba = sum_ > EPSILON ? p[i] / sum_ : 0.5
+    win_proba_deriv = sum_ > EPSILON ? (sum_ .- p[i]) ./ sum_.^2 : 0.
     return (
         csf.a_l + (csf.a_w - csf.a_l) * win_proba
         + (csf.w - csf.l + (csf.a_w - csf.a_l) * p[i]) * win_proba_deriv
@@ -97,8 +100,8 @@ end
 
 function all_reward_derivs(csf::CSF, p::Vector)
     sum_ = sum(p)
-    win_probas = p ./ sum_
-    win_proba_derivs = (sum_ .- p) ./ sum_.^2
+    win_probas = sum_ > EPSILON ? p ./ sum_ : fill(0.5, size(p))
+    win_proba_derivs = sum_ > EPSILON ? (sum_ .- p) ./ sum_.^2 : fill(0., size(p))
     return (
         csf.a_l .+ (csf.a_w - csf.a_l) .* win_probas
         + (csf.w - csf.l .+ (csf.a_w - csf.a_l) .* p) .* win_proba_derivs
@@ -107,8 +110,8 @@ end
 
 function reward_and_deriv(csf::CSF, i::Integer, p::Vector)
     sum_ = sum(p)
-    win_proba = p[i] ./ sum_
-    win_proba_deriv = (sum_ .- p[i]) ./ sum_.^2
+    win_proba = sum_ > EPSILON ? p[i] ./ sum_ : 0.5
+    win_proba_deriv = sum_ > EPSILON ? (sum_ .- p[i]) ./ sum_.^2 : 0.
     reward = (csf.w + p[i] * csf.a_w) * win_proba + (csf.l + p[i] * csf.a_l) * (1. - win_proba)
     return (
         reward,
@@ -119,8 +122,8 @@ end
 
 function all_rewards_and_derivs(csf::CSF, p::Vector)
     sum_ = sum(p)
-    win_probas = p ./ sum_
-    win_proba_derivs = (sum_ .- p) ./ sum_.^2
+    win_probas = sum_ > EPSILON ? p ./ sum_ : fill(0.5, size(p))
+    win_proba_derivs = sum_ > EPSILON ? (sum_ .- p) ./ sum_.^2 : fill(0., size(p))
     rewards = (csf.w .+ p .* csf.a_w) .* win_probas .+ (csf.l .+ p .* csf.a_l) .* (1. .- win_probas)
     return (
         rewards,
@@ -443,7 +446,8 @@ end
 function solve_roots(
     problem::Problem;
     init_guesses::Vector{Float64} = [10.0^i for i in -5:5],
-    resolve_multiple = true
+    resolve_multiple = true,
+    ftol = 1e-8
 )
     jac! = get_jac(problem, inplace = true)
     function obj!(val, x)
@@ -461,6 +465,7 @@ function solve_roots(
         res = nlsolve(
             obj!,
             log.(init_guess),
+            ftol = ftol,
             method = :trust_region  # this is just the default
         )
         if res.f_converged
@@ -468,12 +473,17 @@ function solve_roots(
             results[i, :, :] = reshape(exp.(res.zero), (problem.n, 2))
         end
     end
+    # for i in 1:n_guesses
+    #     println("$i is success: ", successes[i])
+    #     println("$i result: ", results[i, :, :])
+    # end
     if !any(successes)
         println("Roots solver failed to converge from the given initial guesses!")
         return get_null_result(problem)
     end
     results = results[successes, :, :]
     solverResult = SolverResult(problem, true, results)
+    println("Shape of roots solution: ", size(solverResult.strats))
     if resolve_multiple
         return resolve_multiple_solutions(solverResult, problem)
     else
@@ -491,19 +501,24 @@ function solve_hybrid(
     if verbose
         println("Finding roots...")
     end
-    roots_sol = solve_roots(problem, init_guesses = init_guesses, resolve_multiple = false)
+    roots_sol = solve_roots(problem, init_guesses = init_guesses, ftol = 1e-4, resolve_multiple = false)
     if !roots_sol.success
         return roots_sol
     end
     good_sols = SolverResult[]
-    strats = reshape(roots_sol.strats, :, problem.n, 2)  # just for if there's only one solution
+    strats = cat(
+        roots_sol.strats,
+        zeros(1, problem.n, 2),  # add zero result
+        dims = 1
+    )
+    println("new strats shape: ", size(strats))
     if verbose
         println("Iterating...")
     end
     Threads.@threads for i in 1:size(strats)[1]
         strats_ = copy(selectdim(strats, 1, i))
         iter_sol = solve_iters(problem, strats_; max_iters, tol, verbose)
-        if iter_sol.success
+        if true #iter_sol.success
             push!(good_sols, iter_sol)
         end
     end
