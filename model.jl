@@ -61,12 +61,10 @@ function df(prodFunc::ProdFunc, Xs::Vector, Xp::Vector)
 end
 
 function get_total_safety(s::Array)
-    println("s: ", s)
     probas = s ./ (1. .+ s)
     # if s is infinite, proba should be 1
     probas[isnan.(probas)] .= 1.
     out = prod(probas, dims = ndims(s))
-    println("total_safety: ", out)
     return out
 end
 
@@ -481,7 +479,8 @@ end
 function solve_roots(
     problem::Problem;
     init_guesses::Vector{Float64} = [10.0^i for i in -5:5],
-    resolve_multiple = true
+    resolve_multiple = true,
+    ftol = 1e-8
 )
     jac! = get_jac(problem, inplace = true)
     function obj!(val, x)
@@ -499,6 +498,7 @@ function solve_roots(
         res = nlsolve(
             obj!,
             log.(init_guess),
+            ftol = ftol,
             method = :trust_region  # this is just the default
         )
         if res.f_converged
@@ -506,12 +506,17 @@ function solve_roots(
             results[i, :, :] = reshape(exp.(res.zero), (problem.n, 2))
         end
     end
+    # for i in 1:n_guesses
+    #     println("$i is success: ", successes[i])
+    #     println("$i result: ", results[i, :, :])
+    # end
     if !any(successes)
         println("Roots solver failed to converge from the given initial guesses!")
         return get_null_result(problem)
     end
     results = results[successes, :, :]
     solverResult = SolverResult(problem, true, results)
+    println("Shape of roots solution: ", size(solverResult.strats))
     if resolve_multiple
         return resolve_multiple_solutions(solverResult, problem)
     else
@@ -529,7 +534,7 @@ function solve_hybrid(
     if verbose
         println("Finding roots...")
     end
-    roots_sol = solve_roots(problem, init_guesses = init_guesses, resolve_multiple = false)
+    roots_sol = solve_roots(problem, init_guesses = init_guesses, ftol = 1e-4, resolve_multiple = false)
     if !roots_sol.success
         return roots_sol
     end
