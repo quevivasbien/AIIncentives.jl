@@ -2,10 +2,10 @@ using Optim
 using NLsolve
 
 
-const DEFAULT_ITER_TOL = 1e-6
+const DEFAULT_ITER_TOL = 1e-4
 const DEFAULT_ITER_MAX_ITERS = 100
-const DEFAULT_SOLVER_TOL = 1e-6
-const DEFAULT_SOLVER_MAX_ITERS = 100
+const DEFAULT_SOLVER_TOL = 1e-5
+const DEFAULT_SOLVER_MAX_ITERS = 400
 const EPSILON = 1e-8
 
 struct ProdFunc
@@ -64,8 +64,13 @@ function get_total_safety(s::Array)
     probas = s ./ (1. .+ s)
     # if s is infinite, proba should be 1
     probas[isnan.(probas)] .= 1.
-    out = prod(probas, dims = ndims(s))
-    return out
+    return prod(probas, dims = ndims(s))
+end
+
+function get_total_safety(s::Vector)
+    probas = s ./ (1. .+ s)
+    probas[isnan.(probas)] .= 1
+    return prod(probas)
 end
 
 
@@ -172,13 +177,13 @@ Problem(d, r, prodFunc, csf) = Problem(length(d), d, r, prodFunc, csf)
 
 function payoff(problem::Problem, i::Integer, Xs::Vector, Xp::Vector)
     (s, p) = f(problem.prodFunc, Xs, Xp)
-    σ = prod(s ./ (1. .+ s))
+    σ = get_total_safety(s)
     return σ .* reward(problem.csf, i, p) .- (1. .- σ) .* problem.d[i] .- problem.r[i] .* (Xs[i] + Xp[i])
 end
 
 function payoff_deriv(problem::Problem, i::Integer, Xs::Vector, Xp::Vector)
     (s, p) = f(problem.prodFunc, Xs, Xp)
-    σ = prod(s ./ (1. .+ s))
+    σ = get_total_safety(s)
     proba_mult = σ / (s[i] * (1. + s[i]))
     prod_jac = df_from_s_p(problem.prodFunc, i, s[i], p[i])  # a 2 x 2 array
     s_ks = prod_jac[1, 1]
@@ -194,7 +199,7 @@ function payoff_deriv(problem::Problem, i::Integer, Xs::Vector, Xp::Vector)
 end
 
 function all_payoffs_with_s_p(problem::Problem, Xs::Vector, Xp::Vector, s::Vector, p::Vector)
-    σ = prod(s ./ (1. .+ s))
+    σ = get_total_safety(s)
     return σ .* all_rewards(problem.csf, p) .- (1. .- σ) .* problem.d .- problem.r .* (Xs .+ Xp)
 end
 
@@ -205,7 +210,7 @@ end
 
 function all_payoffs_deriv_flat(problem::Problem, Xs::Vector, Xp::Vector)
     (s, p) = f(problem.prodFunc, Xs, Xp)
-    σ = prod(s ./ (1. .+ s))
+    σ = get_total_safety(s)
     proba_mult = σ ./ (s .* (1. .+ s))
     prod_jac = df(problem.prodFunc, Xs, Xp)  # an n x 2 x 2 array
     s_ks = prod_jac[:, 1, 1]
@@ -267,38 +272,40 @@ end
 
 
 
-struct SolverResult
+struct SolverResult{T <: AbstractArray}
     success::Bool
-    strats
-    s
-    p
-    payoffs
+    Xs::T
+    Xp::T
+    s::T
+    p::T
+    payoffs::T
 end
 
 function trim_to_index(result::SolverResult, index)
     return SolverResult(
         result.success,
-        selectdim(result.strats, 1, index),
+        selectdim(result.Xs, 1, index),
+        selectdim(result.Xp, 1, index),
         selectdim(result.s, 1, index),
         selectdim(result.p, 1, index),
         selectdim(result.payoffs, 1, index)
     )
 end
 
-function prune_duplicates(result::SolverResult; atol = 1e-6, rtol=1e-1)
-    if ndims(result.strats) < 3
+function prune_duplicates(result::SolverResult; atol = 1e-6, rtol=5e-2)
+    if ndims(result.Xs) < 2
         return result
     end
     dups = Vector{Integer}()
     unique = Vector{Integer}()
-    n_results = size(result.strats, 1)
+    n_results = size(result.Xs, 1)
     for i in 1:n_results
         if i ∈ dups
             continue
         end
-        strats1 = selectdim(result.strats, 1, i)
+        strats1 =  hcat(selectdim(result.Xs, 1, i), selectdim(result.Xp, 1, i))
         for j in (i+1):n_results
-            strats2 = selectdim(result.strats, 1, j)
+            strats2 = hcat(selectdim(result.Xs, 1, j), selectdim(result.Xp, 1, j))
             if isapprox(strats1, strats2; atol = atol, rtol = rtol)
                 push!(dups, j)
             end
@@ -308,45 +315,37 @@ function prune_duplicates(result::SolverResult; atol = 1e-6, rtol=1e-1)
     return trim_to_index(result, unique)
 end
 
-function fill_from_problem(problem::Problem, result::SolverResult)
-    if ndims(result.strats) > 2
-        strats = reshape(result.strats, :, problem.n, 2)
-        new_s = similar(strats, size(strats)[1:2])
-        new_p = similar(strats, size(strats)[1:2])
-        new_payoffs = similar(strats, size(strats)[1:2])
-        for i in 1:size(strats)[1]
-            (new_s[i, :], new_p[i, :]) = f(problem.prodFunc, strats[i, :, 1], strats[i, :, 2])
-            new_payoffs[i, :] = all_payoffs_with_s_p(problem, strats[i, :, 1], strats[i, :, 2], new_s[i, :], new_p[i, :])
+function get_s_p_payoffs(problem::Problem, Xs_, Xp_)
+    if ndims(Xs_) > 1
+        Xs = reshape(Xs_, :, problem.n)
+        Xp = reshape(Xp_, :, problem.n)
+        s = similar(Xs)
+        p = similar(Xs)
+        payoffs = similar(Xs)
+        for i in 1:size(Xs)[1]
+            (s[i, :], p[i, :]) = f(problem.prodFunc, Xs[i, :], Xp[i, :])
+            payoffs[i, :] = all_payoffs_with_s_p(problem, Xs[i, :], Xp[i, :], s[i, :], p[i, :])
         end
-        return SolverResult(
-            result.success,
-            result.strats,
-            reshape(new_s, size(result.s)),
-            reshape(new_p, size(result.p)),
-            reshape(new_payoffs, size(result.payoffs))
+        return (
+            reshape(s, size(Xs_)),
+            reshape(p, size(Xs_)),
+            reshape(payoffs, size(Xs_))
         )
     else
-        (new_s, new_p) = f(problem.prodFunc, result.strats[:, 1], result.strats[:, 2])
-        new_payoffs = all_payoffs_with_s_p(problem, result.strats[:, 1], result.strats[:, 2], new_s, new_p)
-        return SolverResult(
-            result.success,
-            result.strats,
-            new_s,
-            new_p,
-            new_payoffs
-        )
+        (s, p) = f(problem.prodFunc, Xs_, Xp_)
+        payoffs = all_payoffs_with_s_p(problem, Xs_, Xp_, s, p)
+        return s, p, payoffs
     end
 end
 
-function SolverResult(problem::Problem, success::Bool, strats::Array, fill = true)
-    first_dims = size(strats)[1:ndims(strats)-1]
-    s = similar(strats, first_dims)
-    p = similar(strats, first_dims)
-    payoffs = similar(strats, first_dims)
-    result = SolverResult(success, strats, s, p, payoffs)
-    result = prune_duplicates(result)
-    if fill
-        return fill_from_problem(problem, result)
+function SolverResult(problem::Problem, success::Bool, Xs, Xp; fill = true, prune = true)
+    result = if fill
+        SolverResult(success, Xs, Xp, get_s_p_payoffs(problem, Xs, Xp)...)
+    else
+        SolverResult(success, Xs, Xp, similar(Xs), similar(Xs), similar(Xs))
+    end
+    if prune
+        return prune_duplicates(result)
     else
         return result
     end
@@ -355,7 +354,8 @@ end
 function make_3d(result::SolverResult, n)
     return SolverResult(
         result.success,
-        reshape(result.strats, :, n, 2),
+        reshape(result.Xs, :, n),
+        reshape(result.Xp, :, n),
         reshape(result.s, :, n),
         reshape(result.p, :, n),
         reshape(result.payoffs, :, n)
@@ -365,7 +365,8 @@ end
 function Base.:+(result1::SolverResult, result2::SolverResult)
     return SolverResult(
         result1.success && result2.success,
-        cat(result1.strats, result2.strats, dims = 1),
+        cat(result1.Xs, result2.Xs, dims = 1),
+        cat(result1.Xp, result2.Xp, dims = 1),
         cat(result1.s, result2.s, dims = 1),
         cat(result1.p, result2.p, dims = 1),
         cat(result1.payoffs, result2.payoffs, dims = 1)
@@ -375,7 +376,8 @@ end
 function get_null_result(n)
     return SolverResult(
         false,
-        fill(NaN, 1, n, 2),
+        fill(NaN, 1, n),
+        fill(NaN, 1, n),
         fill(NaN, 1, n),
         fill(NaN, 1, n),
         fill(NaN, 1, n)
@@ -386,9 +388,9 @@ function resolve_multiple_solutions(
     result::SolverResult,
     problem::Problem
 )
-    if ndims(result.strats) == 2
+    if ndims(result.Xs) == 1
         return result
-    elseif size(result.strats)[1] == 1
+    elseif size(result.Xs)[1] == 1
         return trim_to_index(result, 1)
     end
 
@@ -396,15 +398,23 @@ function resolve_multiple_solutions(
     best = argmaxes[1]
     if any(best .!= argmaxes[2:end])
         println("More than one result found; equilibrium is ambiguous")
-        return get_null_result(problem)
+        return get_null_result(problem.n)
     end
     
     return trim_to_index(result, best)
 end
 
+function print(result::SolverResult)
+    println("Xs: ", result.Xs)
+    println("Xp: ", result.Xp)
+    println("s: ", result.s)
+    println("p: ", result.p)
+    println("payoffs: ", result.payoffs, '\n')
+end
+
 
 function solve_iters_single(problem::Problem, strat::Array)
-    new_strats = similar(strat, (problem.n, 2))
+    new_strats = similar(strat)
     for i in 1:problem.n
         obj = get_func(problem, i, strat)
         obj_(x) = obj(exp.(x))
@@ -413,27 +423,38 @@ function solve_iters_single(problem::Problem, strat::Array)
         # lower_bound = [0., 0.]
         # upper_bound = [Inf, Inf]
         init_guess = strat[i, :]
+        # if init_guess is zero-effort, try breaking out
+        if all(init_guess .== 0.)
+            init_guess .= EPSILON
+        end
         res = optimize(
             obj_, jac_!,
             # lower_bound, upper_bound,
             log.(init_guess),
-            NewtonTrustRegion(),
+            NewtonTrustRegion(initial_delta = 0.01, delta_hat = 0.1),
             Optim.Options(
                 x_tol = DEFAULT_SOLVER_TOL,
                 iterations = DEFAULT_SOLVER_MAX_ITERS
             )
         )
-        if any(problem.prodFunc.θ .> 0.)
-            # check the zero-input payoff
+        # check the zero-input payoff
+        zero_payoff = if any(problem.prodFunc.θ .> 0.)
             x = copy(strat)
             x[i, :] = [0., 0.]
             (_, p) = f(problem.prodFunc, x[:, 1], x[:, 2])
-            zero_payoff = reward(problem.csf, i, p)
-            if zero_payoff > -Optim.minimum(res)
-                new_strats[i, :] = [0., 0.]
-            else
-                new_strats[i, :] = exp.(Optim.minimizer(res))
-            end
+            # safety in this case is ∞
+            reward(problem.csf, i, p)
+        else
+            # safety is 0
+            -problem.d[i]
+        end
+        # zero_payoff = begin
+        #     x = copy(strat)
+        #     x[i, :] .= EPSILON
+        #     payoff(problem, i, x[:, 1], x[:, 2])
+        # end
+        if zero_payoff > -Optim.minimum(res)
+            new_strats[i, :] = [0., 0.]
         else
             new_strats[i, :] = exp.(Optim.minimizer(res))
         end
@@ -455,14 +476,14 @@ function solve_iters(
             if verbose
                 println("Exited on iteration ", t)
             end
-            return SolverResult(problem, true, new_strat)
+            return SolverResult(problem, true, new_strat[:, 1], new_strat[:, 2], prune = false)
         end
         strat = new_strat
     end
     if verbose
         println("Reached max iterations")
     end
-    return SolverResult(problem, false, strat)
+    return SolverResult(problem, false, strat[:, 1], strat[:, 2])
 end
 
 function solve_iters(
@@ -472,13 +493,14 @@ function solve_iters(
     tol = DEFAULT_ITER_TOL,
     verbose = true
 )
+    # return solve_iters(problem, exp.(randn(problem.n, 2)); max_iters, tol, verbose)
     return solve_iters(problem, fill(init_guess, (problem.n, 2)); max_iters, tol, verbose)
 end
 
 
 function solve_roots(
     problem::Problem;
-    init_guesses::Vector{Float64} = [10.0^i for i in -5:5],
+    init_guesses::Vector{Float64} = [10.0^(3*i) for i in -2:2],
     resolve_multiple = true,
     ftol = 1e-8
 )
@@ -506,17 +528,12 @@ function solve_roots(
             results[i, :, :] = reshape(exp.(res.zero), (problem.n, 2))
         end
     end
-    # for i in 1:n_guesses
-    #     println("$i is success: ", successes[i])
-    #     println("$i result: ", results[i, :, :])
-    # end
     if !any(successes)
         println("Roots solver failed to converge from the given initial guesses!")
-        return get_null_result(problem)
+        return get_null_result(problem.n)
     end
     results = results[successes, :, :]
-    solverResult = SolverResult(problem, true, results)
-    println("Shape of roots solution: ", size(solverResult.strats))
+    solverResult = SolverResult(problem, true, results[:, :, 1], results[:, :, 2])
     if resolve_multiple
         return resolve_multiple_solutions(solverResult, problem)
     else
@@ -527,7 +544,7 @@ end
 
 function solve_hybrid(
     problem::Problem;
-    init_guesses::Vector{Float64} = [10.0^i for i in -5:5],
+    init_guesses::Vector{Float64} = [10.0^(3*i) for i in -2:2],
     max_iters = DEFAULT_ITER_MAX_ITERS, tol = DEFAULT_ITER_TOL,
     verbose = false
 )
@@ -538,7 +555,12 @@ function solve_hybrid(
     if !roots_sol.success
         return roots_sol
     end
-    strats = reshape(roots_sol.strats, :, problem.n, 2)  # just for if there's only one solution
+    strats = cat(
+        # reshape needed if there's only 1 solution
+        reshape(roots_sol.Xs, :, problem.n),
+        reshape(roots_sol.Xp, :, problem.n),
+        dims = 3
+    )
     n_tries = size(strats)[1]
     converged = falses(n_tries)
     results = Vector{SolverResult}(undef, n_tries)
@@ -554,7 +576,7 @@ function solve_hybrid(
         end
     end
     if !any(converged)
-        return get_null_result(problem)
+        return get_null_result(problem.n)
     end
     combined_sols = sum([make_3d(r, problem.n) for (r, c) in zip(results, converged) if c])
     return resolve_multiple_solutions(prune_duplicates(combined_sols), problem)
@@ -568,12 +590,11 @@ function test()
     @time solve_iters_sol = solve_iters(problem)
     @time solve_roots_sol = solve_roots(problem)
     @time solve_hybrid_sol = solve_hybrid(problem)
-    println("With `solve_iters`: ", solve_iters_sol)
-    println("With `solve_roots`: ", solve_roots_sol)
-    println("With `solve_hybrid`: ", solve_hybrid_sol)
-end
-    
-    
-if abspath(PROGRAM_FILE) == @__FILE__
-    test()
+    println("With `solve_iters`:")
+    print(solve_iters_sol)
+    println("With `solve_roots`:")
+    print(solve_roots_sol)
+    println("With `solve_hybrid`:")
+    print(solve_roots_sol)
+    return
 end

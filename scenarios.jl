@@ -27,7 +27,7 @@ Scenario(
 
 function get_values_for_plot(results::Array{SolverResult, 1})
     n_steps = length(results)
-    n_players = size(results[1].strats)[1]
+    n_players = size(results[1].Xs)[1]
     s = Array{Float64}(undef, n_steps, n_players)
     p = similar(s)
     payoffs = similar(s)
@@ -40,7 +40,7 @@ function get_values_for_plot(results::Array{SolverResult, 1})
     return s, p, total_safety, payoffs
 end
 
-function create_plot(results::Array{SolverResult, 1}, xaxis, xlabel, plotname, labels, title, logscale)
+function create_plot(results::Array{SolverResult, 1}, xaxis, xlabel, plotname, plotsize, labels, title, logscale)
     (s, p, total_safety, payoffs) = get_values_for_plot(results)
     labels_ = reshape(labels, 1, :)
     perf_plt = plot(xaxis, p, xlabel = xlabel, ylabel = "performance", labels = labels_)
@@ -51,23 +51,36 @@ function create_plot(results::Array{SolverResult, 1}, xaxis, xlabel, plotname, l
     end
     total_safety_plt = plot(xaxis, total_safety, xlabel = xlabel, ylabel = "σ", label = nothing)
     payoff_plt = plot(xaxis, payoffs, xlabel = xlabel, ylabel = "payoff", labels = labels_)
-    plot(
+    final_plot = plot(
         perf_plt, safety_plt, total_safety_plt, payoff_plt,
-        layout = (2, 2), size = (1200, 800), legend_font_pointsize = 6
+        layout = (2, 2), size = plotsize, legend_font_pointsize = 6
     )
     if title != nothing
         title!(title)
     end
     if plotname != nothing
         Plots.savefig("$(plotname).png")
-    else
-        gui()
     end
+    return final_plot
+end
+
+function get_colors(n_lines, n_players)
+    palettes = ColorPalette[]
+    red = [1., 0., 0.]
+    green = [0., 1., 0.]
+    blue = [0., 0., 1.]
+    for i in 0:(n_lines-1)
+        λ = i / (n_lines-1)
+        color1 = RGB((red * λ + blue * (1 - λ))...)
+        color2 = RGB(((red + blue) * 0.5 * λ + green * (1 - λ))...)
+        push!(palettes, palette([color1, color2], n_players))
+    end
+    return palettes
 end
 
 function get_values_for_plot(results::Array{SolverResult, 2})
     (n_steps_secondary, n_steps) = size(results)
-    n_players = size(results[1, 1].strats)[1]
+    n_players = size(results[1, 1].Xs)[1]
     s = Array{Float64}(undef, n_steps_secondary, n_steps, n_players)
     p = similar(s)
     payoffs = similar(s)
@@ -82,37 +95,97 @@ function get_values_for_plot(results::Array{SolverResult, 2})
     return s, p, total_safety, payoffs
 end
 
-function create_plot(results::Array{SolverResult, 2}, xaxis, xlabel, plotname, labels, title, logscale)
+function are_players_same(results::Array{SolverResult, 2})
+    (n_steps_secondary, n_steps) = size(results)
+    n_players = size(results[1, 1].Xs)[1]
+    strats = Array{Float64}(undef, n_steps_secondary, n_steps, n_players, 2)
+    for i in 1:n_steps_secondary
+        for j in 1:n_steps
+            strats[i, j, :, 1] = results[i, j].Xs
+            strats[i, j, :, 2] = results[i, j].Xp
+        end
+    end
+    return all(isapprox(strats[:, :, 1, :] - strats[:, :, i, :], zeros(n_steps_secondary, n_steps, 2), atol=1e-2) for i in 2:n_players)
+end
+
+function mean(x; dims)
+    sum(x, dims = dims) ./ size(x)[dims]
+end
+
+function create_plot(results::Array{SolverResult, 2}, xaxis, xlabel, plotname, plotsize, labels, title, logscale)
     (s, p, total_safety, payoffs) = get_values_for_plot(results)
+    players_same = are_players_same(results)
+    combine_values(x) = players_same ? mean(x, dims = 2) : x
     (n_steps_secondary, _, n_players) = size(s)
-    labels1 = reshape(["$(labels[1]), player $i" for i in 1:n_players], 1, :)
-    perf_plt = plot(xaxis, p[1, :, :], xlabel = xlabel, ylabel = "performance", labels = labels1)
-    safety_plt = plot(xaxis, s[1, :, :], xlabel = xlabel, ylabel = "safety", labels = labels1)
-    total_safety_plt = plot(xaxis, total_safety[1, :], xlabel = xlabel, ylabel = "σ", label = labels[1])
-    payoff_plt = plot(xaxis, payoffs[1, :, :], xlabel = xlabel, ylabel = "payoff", labels = labels1)
+    palettes = get_colors(n_steps_secondary, n_players)
+    labels1 = players_same ? labels[1] : reshape(["$(labels[1]), player $i" for i in 1:n_players], 1, :)
+    perf_plt = plot(
+        xaxis, combine_values(p[1, :, :]),
+        xlabel = xlabel, ylabel = "performance",
+        labels = labels1,
+        palette = palettes[1]
+    )
+    safety_plt = plot(
+        xaxis, combine_values(s[1, :, :]),
+        xlabel = xlabel, ylabel = "safety",
+        labels = labels1,
+        palette = palettes[1]
+    )
+    total_safety_plt = plot(
+        xaxis, total_safety[1, :],
+        xlabel = xlabel, ylabel = "σ",
+        label = labels[1],
+        palette = palettes[1]
+    )
+    payoff_plt = plot(
+        xaxis, combine_values(payoffs[1, :, :]),
+        xlabel = xlabel,
+        ylabel = "payoff",
+        labels = labels1,
+        palette = palettes[1]
+    )
     for i in 2:n_steps_secondary
-        labelsi = reshape(["$(labels[i]), player $j" for j in 1:n_players], 1, :)
-        plot!(perf_plt, xaxis, p[i, :, :], labels = labelsi)
-        plot!(safety_plt, xaxis, s[i, :, :], labels = labelsi)
-        plot!(total_safety_plt, xaxis, total_safety[i, :], label = labels[i])
-        plot!(payoff_plt, xaxis, payoffs[i, :, :], labels = labelsi)
+        labelsi = players_same ? labels[i] : reshape(["$(labels[i]), player $j" for j in 1:n_players], 1, :)
+        plot!(
+            perf_plt,
+            xaxis, combine_values(p[i, :, :]),
+            labels = labelsi,
+            palette = palettes[i]
+        )
+        plot!(
+            safety_plt,
+            xaxis, combine_values(s[i, :, :]),
+            labels = labelsi,
+            palette = palettes[i]
+        )
+        plot!(
+            total_safety_plt,
+            xaxis, total_safety[i, :],
+            label = labels[i],
+            palette = palettes[i]
+        )
+        plot!(
+            payoff_plt,
+            xaxis, combine_values(payoffs[i, :, :]),
+            labels = labelsi,
+            palette = palettes[i]
+        )
     end
     if logscale
         yaxis!(perf_plt, :log10)
         yaxis!(safety_plt, :log10)
     end
-    plot(
+    final_plot = plot(
         perf_plt, safety_plt, total_safety_plt, payoff_plt,
-        layout = (2, 2), size = (1200, 800), legend_font_pointsize = 6
+        layout = (2, 2), size = plotsize, legend_font_pointsize = 6
     )
     if title != nothing
         title!(title)
     end
     if plotname != nothing
         Plots.savefig("$(plotname).png")
-    else
-        gui()
     end
+    return final_plot
 end
 
 
@@ -121,18 +194,18 @@ function linspace(start, stop, steps, reps = 1)
     return transpose(repeat(start:stepsize:stop, outer = (1, reps)))
 end
 
-function get_result(problem, max_iters, tol, verbose, solve_method)
-    if solve_method == :iters
+function get_result(problem, max_iters, tol, verbose, method)
+    if method == :iters
         return solve_iters(
             problem,
             max_iters = max_iters,
             tol = tol,
             verbose = verbose
         )
-    elseif solve_method == :roots
+    elseif method == :roots
         return solve_roots(problem)
     else
-        # implicitly solve_method == :hybrid by default
+        # implicitly method == :hybrid by default
         return solve_hybrid(
             problem,
             max_iters = max_iters,
@@ -145,11 +218,11 @@ end
 
 function solve_with_secondary_variation(
     scenario::Scenario,
-    makeplot,
     plotname,
+    plotsize,
     title,
     logscale,
-    solve_method,
+    method,
     max_iters,
     tol,
     verbose
@@ -192,35 +265,35 @@ function solve_with_secondary_variation(
         Threads.@threads for j in 1:n_steps_secondary
             prodFunc = ProdFunc(A[:, i, j], α[:, i, j], B[:, i, j], β[:, i, j], θ[:, i, j])
             problem = Problem(d[:, i, j], r[:, i, j],  prodFunc, scenario.csf)
-            results[j, i] = get_result(problem, max_iters, tol, verbose, solve_method)
+            results[j, i] = get_result(problem, max_iters, tol, verbose, method)
         end
     end
-
-    if makeplot
-        xaxis = varying_param[1, :] == varying_param[2, :] ? varying_param[1, :] : 1:n_steps
-        labels = ["$(scenario.secondary_varying_param) = $(secondary_varying_param[:, i])" for i in 1:n_steps_secondary]
-        create_plot(
-            results,
-            xaxis,
-            scenario.varying_param,
-            plotname,
-            labels,
-            title,
-            logscale
-        )
+    if verbose
+        print.(results)
     end
 
-    return results
+    xaxis = varying_param[1, :] == varying_param[2, :] ? varying_param[1, :] : 1:n_steps
+    labels = ["$(scenario.secondary_varying_param) = $(secondary_varying_param[:, i])" for i in 1:n_steps_secondary]
+    return create_plot(
+        results,
+        xaxis,
+        scenario.varying_param,
+        plotname,
+        plotsize,
+        labels,
+        title,
+        logscale
+    )
 end
 
 
 function solve(
     scenario::Scenario;
-    makeplot = true,
-    plotname = nothing,  # if set to string, will save fig instead of displaying interactive
+    plotname = nothing,  # if set to string, will save fig as .png
+    plotsize = (900, 600),
     title = nothing,
     logscale = false,
-    solve_method = :hybrid,
+    method = :hybrid,
     max_iters = DEFAULT_ITER_MAX_ITERS,
     tol = DEFAULT_ITER_TOL,
     verbose = false
@@ -228,11 +301,11 @@ function solve(
     if scenario.secondary_varying_param != nothing
         return solve_with_secondary_variation(
             scenario,
-            makeplot,
             plotname,
+            plotsize,
             title,
             logscale,
-            solve_method,
+            method,
             max_iters,
             tol,
             verbose
@@ -275,20 +348,19 @@ function solve(
     Threads.@threads for i in 1:n_steps
         prodFunc = ProdFunc(A[:, i], α[:, i], B[:, i], β[:, i], θ[:, i])
         problem = Problem(d[:, i], r[:, i],  prodFunc, scenario.csf)
-        results[i] = get_result(problem, max_iters, tol, verbose, solve_method)
+        results[i] = get_result(problem, max_iters, tol, verbose, method)
+    end
+    if verbose
+        print.(results)
     end
 
-    if makeplot
-        xaxis = varying_param[1, :] == varying_param[2, :] ? varying_param[1, :] : 1:n_steps
-        labels = ["player $i" for i in 1:n_steps]
-        create_plot(results, xaxis, scenario.varying_param, plotname, labels, title, logscale)
-    end
-
-    return results
+    xaxis = varying_param[1, :] == varying_param[2, :] ? varying_param[1, :] : 1:n_steps
+    labels = ["player $i" for i in 1:n_steps]
+    return create_plot(results, xaxis, scenario.varying_param, plotname, plotsize, labels, title, logscale)
 end
 
 
-function test(solve_method = :hybrid)
+function test(method = :hybrid)
     println("Running test on `scenarios.jl`...")
 
     A = [10., 10.]
@@ -301,5 +373,5 @@ function test(solve_method = :hybrid)
 
     scenario = Scenario(2, A, α, B, β, θ, d, r, secondary_varying_param = :θ)
 
-    @time result = solve(scenario, solve_method = solve_method, verbose = true)
+    @time solve(scenario, method = method, verbose = true)
 end
