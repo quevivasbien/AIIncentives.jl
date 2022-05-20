@@ -1,5 +1,5 @@
 using Plots
-include("./model.jl")
+include("./solve.jl")
 
 
 struct Scenario
@@ -204,6 +204,14 @@ function get_result(problem, max_iters, tol, verbose, method)
         )
     elseif method == :roots
         return solve_roots(problem)
+    elseif method == :grid
+        return solve_hybrid(
+            problem,
+            iterating_method = solve_grid,
+            max_iters = max_iters,
+            tol = tol,
+            verbose = verbose
+        )
     else
         # implicitly method == :hybrid by default
         return solve_hybrid(
