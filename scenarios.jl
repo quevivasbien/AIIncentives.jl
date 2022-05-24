@@ -25,6 +25,9 @@ Scenario(
     secondary_varying_param = nothing
 ) = Scenario(n_players, A, α, B, β, θ, d, r, CSF(w, l, a_w, a_l), varying_param, secondary_varying_param)
 
+
+# Functions for plotting with only single varying param
+
 function get_values_for_plot(results::Array{SolverResult, 1})
     n_steps = length(results)
     n_players = size(results[1].Xs)[1]
@@ -53,7 +56,8 @@ function create_plot(results::Array{SolverResult, 1}, xaxis, xlabel, plotname, p
     payoff_plt = plot(xaxis, payoffs, xlabel = xlabel, ylabel = "payoff", labels = labels_)
     final_plot = plot(
         perf_plt, safety_plt, total_safety_plt, payoff_plt,
-        layout = (2, 2), size = plotsize, legend_font_pointsize = 6
+        layout = (2, 2), size = plotsize, legend_font_pointsize = 6,
+        legend_background_color = RGBA(1., 1., 1., 0.5)
     )
     if title != nothing
         title!(title)
@@ -64,7 +68,21 @@ function create_plot(results::Array{SolverResult, 1}, xaxis, xlabel, plotname, p
     return final_plot
 end
 
-function get_colors(n_lines, n_players)
+
+# Functions for plotting with secondary variation
+
+function get_colors(n_lines)
+    colors = RGB[]
+    red = [1., 0., 0.]
+    blue = [0., 0., 1.]
+    for i in 0:(n_lines-1)
+        λ = i / (n_lines - 1)
+        push!(colors, RGB((red * λ + blue * (1 - λ))...))
+    end
+    return colors
+end
+
+function get_color_palettes(n_lines, n_players)
     palettes = ColorPalette[]
     red = [1., 0., 0.]
     green = [0., 1., 0.]
@@ -73,7 +91,7 @@ function get_colors(n_lines, n_players)
         λ = i / (n_lines-1)
         color1 = RGB((red * λ + blue * (1 - λ))...)
         color2 = RGB(((red + blue) * 0.5 * λ + green * (1 - λ))...)
-        push!(palettes, palette([color1, color2], n_players))
+        push!(palettes, palette([color2, color1], n_players))
     end
     return palettes
 end
@@ -105,28 +123,90 @@ function are_players_same(results::Array{SolverResult, 2})
             strats[i, j, :, 2] = results[i, j].Xp
         end
     end
-    return all(isapprox(strats[:, :, 1, :] - strats[:, :, i, :], zeros(n_steps_secondary, n_steps, 2), atol=1e-2) for i in 2:n_players)
+    return all(
+        isapprox(
+            strats[:, :, 1, :] - strats[:, :, i, :],
+            zeros(n_steps_secondary, n_steps, 2),
+            atol=1e-2
+        ) for i in 2:n_players
+    )
 end
 
 function mean(x; dims)
     sum(x, dims = dims) ./ size(x)[dims]
 end
 
-function create_plot(results::Array{SolverResult, 2}, xaxis, xlabel, plotname, plotsize, labels, title, logscale)
-    (s, p, total_safety, payoffs) = get_values_for_plot(results)
-    players_same = are_players_same(results)
-    combine_values(x) = players_same ? mean(x, dims = 2) : x
-    (n_steps_secondary, _, n_players) = size(s)
-    palettes = get_colors(n_steps_secondary, n_players)
-    labels1 = players_same ? labels[1] : reshape(["$(labels[1]), player $i" for i in 1:n_players], 1, :)
+function _plot_helper_same(xaxis, s, p, total_safety, payoffs, xlabel, labels)
+    n_steps_secondary = size(s)[1]
+    colors = get_colors(n_steps_secondary)
+    combine_values(x) = mean(x, dims=2)
     perf_plt = plot(
         xaxis, combine_values(p[1, :, :]),
+        xlabel = xlabel, ylabel = "performance",
+        labels = labels[1],
+        color = colors[1]
+    )
+    safety_plt = plot(
+        xaxis, combine_values(s[1, :, :]),
+        xlabel = xlabel, ylabel = "safety",
+        labels = labels[1],
+        color = colors[1]
+    )
+    total_safety_plt = plot(
+        xaxis, total_safety[1, :],
+        xlabel = xlabel, ylabel = "σ",
+        label = labels[1],
+        color = colors[1]
+    )
+    payoff_plt = plot(
+        xaxis, combine_values(payoffs[1, :, :]),
+        xlabel = xlabel,
+        ylabel = "payoff",
+        labels = labels[1],
+        color = colors[1]
+    )
+    for i in 2:n_steps_secondary
+        plot!(
+            perf_plt,
+            xaxis, combine_values(p[i, :, :]),
+            labels = labels[i],
+            color = colors[i]
+        )
+        plot!(
+            safety_plt,
+            xaxis, combine_values(s[i, :, :]),
+            labels = labels[i],
+            color = colors[i]
+        )
+        plot!(
+            total_safety_plt,
+            xaxis, total_safety[i, :],
+            label = labels[i],
+            color = colors[i]
+        )
+        plot!(
+            payoff_plt,
+            xaxis, combine_values(payoffs[i, :, :]),
+            labels = labels[i],
+            color = colors[i]
+        )
+    end
+    return perf_plt, safety_plt, total_safety_plt, payoff_plt
+end
+
+function _plot_helper_het(xaxis, s, p, total_safety, payoffs, xlabel, labels)
+    (n_steps_secondary, _, n_players) = size(s)
+    palettes = get_color_palettes(n_steps_secondary, n_players)
+    colors = get_colors(n_steps_secondary)
+    labels1 = reshape(["$(labels[1]), player $i" for i in 1:n_players], 1, :)
+    perf_plt = plot(
+        xaxis, p[1, :, :],
         xlabel = xlabel, ylabel = "performance",
         labels = labels1,
         palette = palettes[1]
     )
     safety_plt = plot(
-        xaxis, combine_values(s[1, :, :]),
+        xaxis, s[1, :, :],
         xlabel = xlabel, ylabel = "safety",
         labels = labels1,
         palette = palettes[1]
@@ -135,26 +215,26 @@ function create_plot(results::Array{SolverResult, 2}, xaxis, xlabel, plotname, p
         xaxis, total_safety[1, :],
         xlabel = xlabel, ylabel = "σ",
         label = labels[1],
-        palette = palettes[1]
+        color = colors[1]
     )
     payoff_plt = plot(
-        xaxis, combine_values(payoffs[1, :, :]),
+        xaxis, payoffs[1, :, :],
         xlabel = xlabel,
         ylabel = "payoff",
         labels = labels1,
         palette = palettes[1]
     )
     for i in 2:n_steps_secondary
-        labelsi = players_same ? labels[i] : reshape(["$(labels[i]), player $j" for j in 1:n_players], 1, :)
+        labelsi = reshape(["$(labels[i]), player $j" for j in 1:n_players], 1, :)
         plot!(
             perf_plt,
-            xaxis, combine_values(p[i, :, :]),
+            xaxis, p[i, :, :],
             labels = labelsi,
             palette = palettes[i]
         )
         plot!(
             safety_plt,
-            xaxis, combine_values(s[i, :, :]),
+            xaxis, s[i, :, :],
             labels = labelsi,
             palette = palettes[i]
         )
@@ -162,22 +242,36 @@ function create_plot(results::Array{SolverResult, 2}, xaxis, xlabel, plotname, p
             total_safety_plt,
             xaxis, total_safety[i, :],
             label = labels[i],
-            palette = palettes[i]
+            color = colors[i]
         )
         plot!(
             payoff_plt,
-            xaxis, combine_values(payoffs[i, :, :]),
+            xaxis, payoffs[i, :, :],
             labels = labelsi,
             palette = palettes[i]
         )
     end
+    return perf_plt, safety_plt, total_safety_plt, payoff_plt
+end
+
+
+function create_plot(results::Array{SolverResult, 2}, xaxis, xlabel, plotname, plotsize, labels, title, logscale)
+    (s, p, total_safety, payoffs) = get_values_for_plot(results)
+    players_same = are_players_same(results)
+    (perf_plt, safety_plt, total_safety_plt, payoff_plt) = if players_same
+        _plot_helper_same(xaxis, s, p, total_safety, payoffs, xlabel, labels)
+    else
+        _plot_helper_het(xaxis, s, p, total_safety, payoffs, xlabel, labels)
+    end
+    
     if logscale
         yaxis!(perf_plt, :log10)
         yaxis!(safety_plt, :log10)
     end
     final_plot = plot(
         perf_plt, safety_plt, total_safety_plt, payoff_plt,
-        layout = (2, 2), size = plotsize, legend_font_pointsize = 6
+        layout = (2, 2), size = plotsize, legend_font_pointsize = 6,
+        legend_background_color = RGBA(1., 1., 1., 0.5)
     )
     if title != nothing
         title!(title)
@@ -212,6 +306,12 @@ function get_result(problem, max_iters, tol, verbose, method)
             tol = tol,
             verbose = verbose
         )
+        # return solve_grid(
+        #     problem,
+        #     max_iters = max_iters,
+        #     tol = tol,
+        #     verbose = verbose
+        # )
     else
         # implicitly method == :hybrid by default
         return solve_hybrid(

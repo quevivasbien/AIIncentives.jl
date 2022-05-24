@@ -1,14 +1,14 @@
 include("./ProdFunc.jl")
 
 
-function get_total_safety(s::Array)
+function get_total_safety(s::AbstractArray)
     probas = s ./ (1. .+ s)
     # if s is infinite, proba should be 1
     probas[isnan.(s)] .= 1.
     return prod(probas, dims = ndims(s))
 end
 
-function get_total_safety(s::Vector)
+function get_total_safety(s::AbstractVector)
     probas = s ./ (1. .+ s)
     probas[isnan.(s)] .= 1.
     return prod(probas)
@@ -123,23 +123,23 @@ end
 
 
 
-struct SolverResult{T <: AbstractArray}
+struct SolverResult
     success::Bool
-    Xs::T
-    Xp::T
-    s::T
-    p::T
-    payoffs::T
+    Xs::Array
+    Xp::Array
+    s::Array
+    p::Array
+    payoffs::Array
 end
 
 function trim_to_index(result::SolverResult, index)
     return SolverResult(
         result.success,
-        selectdim(result.Xs, 1, index),
-        selectdim(result.Xp, 1, index),
-        selectdim(result.s, 1, index),
-        selectdim(result.p, 1, index),
-        selectdim(result.payoffs, 1, index)
+        copy(selectdim(result.Xs, 1, index)),
+        copy(selectdim(result.Xp, 1, index)),
+        copy(selectdim(result.s, 1, index)),
+        copy(selectdim(result.p, 1, index)),
+        copy(selectdim(result.payoffs, 1, index))
     )
 end
 
@@ -227,11 +227,11 @@ end
 function get_null_result(n)
     return SolverResult(
         false,
-        fill(NaN, 1, n),
-        fill(NaN, 1, n),
-        fill(NaN, 1, n),
-        fill(NaN, 1, n),
-        fill(NaN, 1, n)
+        fill(NaN, n),
+        fill(NaN, n),
+        fill(NaN, n),
+        fill(NaN, n),
+        fill(NaN, n)
     )
 end
 

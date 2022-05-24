@@ -61,8 +61,7 @@ end
 function reward(csf::CSF, i::Integer, p::Vector)
     sum_ = sum(p)
     if sum_ == 0.
-        # win_proba = 1 / n
-        return (csf.w + csf.l) / length(p)
+        return 1. / length(p)
     end
     win_proba = p[i] / sum_
     return (
@@ -74,8 +73,7 @@ end
 function all_rewards(csf::CSF, p::Vector)
     sum_ = sum(p)
     if sum_ == 0.
-        # win_probas = [1/n, ..., 1/n]
-        return fill((csf.w + csf.l) / length(p), length(p))
+        return fill(1. / length(p), length(p))
     end
     win_probas = p ./ sum_
     return (
@@ -113,7 +111,7 @@ end
 function reward_and_deriv(csf::CSF, i::Integer, p::Vector)
     sum_ = sum(p)
     if sum_ == 0.
-        return ((csf.w + csf.l) / length(p), Inf)
+        return (1. / length(p), Inf)
     end
     win_proba = p[i] ./ sum_
     win_proba_deriv = (sum_ .- p[i]) ./ sum_.^2
@@ -128,7 +126,7 @@ end
 function all_rewards_and_derivs(csf::CSF, p::Vector)
     sum_ = sum(p)
     if sum_ == 0.
-        return (fill((csf.w + csf.l) / length(p), length(p)), fill(Inf, length(p)))
+        return (fill(1 / length(p), length(p)), fill(Inf, length(p)))
     end
     win_probas = p ./ sum_
     win_proba_derivs = (sum_ .- p) ./ sum_.^2

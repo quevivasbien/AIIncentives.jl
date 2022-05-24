@@ -11,7 +11,7 @@ const DEFAULT_SOLVER_MAX_ITERS = 400
 const EPSILON = 1e-8
 
 const TRUST_DELTA_INIT = 0.01
-const TRUST_DELTA_MAX = 0.1
+const TRUST_DELTA_MAX = 1.
 
 # ITERATING METHOD `solve_iters`
 
@@ -22,11 +22,10 @@ function single_iter_for_i(problem, strat, i, init_guess)
     jac_!(var, x) = jac!(var, exp.(x))
     # if init_guess is zero-effort, try breaking out
     if all(init_guess .== 0.)
-        init_guess .= EPSILON
+        init_guess .= 1.
     end
     res = optimize(
         obj_, jac_!,
-        # lower_bound, upper_bound,
         log.(init_guess),
         NewtonTrustRegion(initial_delta = TRUST_DELTA_INIT, delta_hat = TRUST_DELTA_MAX),
         Optim.Options(
@@ -99,18 +98,31 @@ end
 # ITERATING GRID SOLVER METHOD `solve_grid`
 
 function search_grid_for_best(problem::Problem, strat::Array, i, lower, upper, grid_size)
-    payoffs = Array{Float64}(undef, grid_size, grid_size)
-    step = (upper - lower) / (grid_size - 1)
-    Threads.@threads for j in 1:grid_size
-        x = copy(strat)
-        for k in 1:grid_size
-            x[i, 1] = exp(lower + (j - 1) * step)
-            x[i, 2] = exp(lower + (k - 1) * step)
-            payoffs[k, j] = payoff(problem, i, x[:, 1], x[:, 2])
+    # step = (upper - lower) / (grid_size - 1)
+    best_x = strat[i, :]
+    best_payoff = payoff(problem, i, strat[:, 1], strat[:, 2])
+    x = copy(strat)
+    # for _ in 1:grid_size
+    #     x[i, :] = exp.(rand(2) .* (upper - lower) .+ lower)
+    #     new_payoff = payoff(problem, i, x[:, 1], x[:, 2])
+    #     if new_payoff > best_payoff
+    #         best_payoff = new_payoff
+    #         best_x = x[i, :]
+    #         # println(best_x)
+    #     end
+    # end
+    for log_Xs in lower:step:upper
+        x[i, 1] = exp(log_Xs)
+        for log_Xp in lower:step:upper
+            x[i, 2] = exp(log_Xp)
+            new_payoff = payoff(problem, i, x[:, 1], x[:, 2])
+            if new_payoff > best_payoff
+                best_payoff = new_payoff
+                best_x = x[i, :]
+            end
         end
     end
-    (k, j) = Tuple(argmax(payoffs))
-    return [exp(lower + (j - 1) * step), exp(lower + (k - 1) * step)]
+    return best_x
 end
 
 function solve_grid_single(
@@ -127,8 +139,8 @@ end
 function solve_grid(
     problem::Problem,
     init_guess::Array;
-    lower = -8., upper = 8.,
-    grid_size = 40,
+    lower = -5., upper = 5.,
+    grid_size = 20,
     max_iters = DEFAULT_ITER_MAX_ITERS,
     tol = DEFAULT_ITER_TOL,
     verbose = false
@@ -146,8 +158,8 @@ end
 function solve_grid(
     problem::Problem,
     init_guess::Number = EPSILON;
-    lower = -10., upper = 10.,
-    grid_size = 100,
+    lower = -5., upper = 5.,
+    grid_size = 20,
     max_iters = DEFAULT_ITER_MAX_ITERS,
     tol = DEFAULT_ITER_TOL,
     verbose = false
@@ -229,8 +241,7 @@ function solve_hybrid(
         dims = 3
     )
     n_tries = size(strats)[1]
-    converged = falses(n_tries)
-    results = Vector{SolverResult}(undef, n_tries)
+    results = SolverResult[]
     if verbose
         println("Iterating...")
     end
@@ -238,19 +249,19 @@ function solve_hybrid(
         strats_ = copy(selectdim(strats, 1, i))
         iter_sol = iterating_method(problem, strats_; max_iters, tol, verbose)
         if iter_sol.success
-            converged[i] = true
-            results[i] = iter_sol
+            push!(results, iter_sol)
         end
     end
-    if !any(converged)
+    if length(results) == 0
         return get_null_result(problem.n)
     end
-    combined_sols = sum([make_3d(r, problem.n) for (r, c) in zip(results, converged) if c])
+    combined_sols = sum([make_3d(r, problem.n) for r in results])
     return resolve_multiple_solutions(prune_duplicates(combined_sols), problem)
 end
     
     
 function test()
+    println("Running test on `solve.jl`...")
     prodFunc = ProdFunc([10., 10.], [0.5, 0.5], [10., 10.], [0.5, 0.5], [0., 0.])
     csf = CSF(1., 0., 0., 0.)
     problem = Problem([1., 1.], [0.01, 0.01], prodFunc, csf)
