@@ -28,7 +28,7 @@ Scenario(
 
 # Functions for plotting with only single varying param
 
-function get_values_for_plot(results::Array{SolverResult, 1})
+function get_values_for_plot(results::Vector{SolverResult})
     n_steps = length(results)
     n_players = size(results[1].Xs)[1]
     s = Array{Float64}(undef, n_steps, n_players)
@@ -43,7 +43,7 @@ function get_values_for_plot(results::Array{SolverResult, 1})
     return s, p, total_safety, payoffs
 end
 
-function create_plot(results::Array{SolverResult, 1}, xaxis, xlabel, plotname, plotsize, labels, title, logscale)
+function create_plot(results::Vector{SolverResult}, xaxis, xlabel, plotname, plotsize, labels, title, logscale)
     (s, p, total_safety, payoffs) = get_values_for_plot(results)
     labels_ = reshape(labels, 1, :)
     perf_plt = plot(xaxis, p, xlabel = xlabel, ylabel = "performance", labels = labels_)
@@ -58,6 +58,43 @@ function create_plot(results::Array{SolverResult, 1}, xaxis, xlabel, plotname, p
         perf_plt, safety_plt, total_safety_plt, payoff_plt,
         layout = (2, 2), size = plotsize, legend_font_pointsize = 6,
         legend_background_color = RGBA(1., 1., 1., 0.5)
+    )
+    if title != nothing
+        title!(title)
+    end
+    if plotname != nothing
+        Plots.savefig("$(plotname).png")
+    end
+    return final_plot
+end
+
+# functions for plotting with single varying param, scatterplot instead of line plot (for when multiple solutions are found)
+
+function get_values_for_scatterplot(results::Vector{SolverResult}, xaxis)
+    xaxis_ = vcat((fill(x, size(r.Xs)[1]) for (x, r) in zip(xaxis, results))...)
+    s = vcat((r.s for r in results)...)
+    p = vcat((r.p for r in results)...)
+    payoffs = vcat((r.payoffs for r in results)...)
+    total_safety = get_total_safety(s)
+    return xaxis_, s, p, total_safety, payoffs
+end
+
+function create_scatterplot(results::Vector{SolverResult}, xaxis, xlabel, plotname, plotsize, labels, title, logscale)
+    (xaxis_, s, p, total_safety, payoffs) = get_values_for_scatterplot(results, xaxis)
+    labels_ = reshape(labels, 1, :)
+    perf_plt = scatter(xaxis_, p, xlabel = xlabel, ylabel = "performance", labels = labels_)
+    safety_plt = scatter(xaxis_, s, xlabel = xlabel, ylabel = "safety", labels = labels_)
+    if logscale
+        yaxis!(perf_plt, :log10)
+        yaxis!(safety_plt, :log10)
+    end
+    total_safety_plt = scatter(xaxis_, total_safety, xlabel = xlabel, ylabel = "σ", label = nothing)
+    payoff_plt = scatter(xaxis_, payoffs, xlabel = xlabel, ylabel = "payoff", labels = labels_)
+    final_plot = plot(
+        perf_plt, safety_plt, total_safety_plt, payoff_plt,
+        layout = (2, 2), size = plotsize, legend_font_pointsize = 6,
+        legend_background_color = RGBA(1., 1., 1., 0.5),
+        markeralpha = 0.25, markerstrokealpha = 0.
     )
     if title != nothing
         title!(title)
@@ -299,19 +336,26 @@ function get_result(problem, max_iters, tol, verbose, method)
     elseif method == :roots
         return solve_roots(problem)
     elseif method == :grid
-        return solve_hybrid(
-            problem,
-            iterating_method = solve_grid,
-            max_iters = max_iters,
-            tol = tol,
-            verbose = verbose
-        )
-        # return solve_grid(
+        # return solve_hybrid(
         #     problem,
+        #     iterating_method = solve_grid,
         #     max_iters = max_iters,
         #     tol = tol,
         #     verbose = verbose
         # )
+        return solve_grid(
+            problem,
+            max_iters = max_iters,
+            tol = tol,
+            verbose = verbose
+        )
+    elseif method == :scatter
+        return solve_scatter(
+            problem,
+            max_iters = max_iters,
+            tol = tol,
+            verbose = verbose
+        )
     else
         # implicitly method == :hybrid by default
         return solve_hybrid(
@@ -464,7 +508,8 @@ function solve(
 
     xaxis = varying_param[1, :] == varying_param[2, :] ? varying_param[1, :] : 1:n_steps
     labels = ["player $i" for i in 1:n_steps]
-    return create_plot(results, xaxis, scenario.varying_param, plotname, plotsize, labels, title, logscale)
+    create_plot_ = method == :scatter ? create_scatterplot : create_plot
+    return create_plot_(results, xaxis, scenario.varying_param, plotname, plotsize, labels, title, logscale)
 end
 
 

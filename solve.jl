@@ -4,14 +4,14 @@ using NLsolve
 include("./Problem.jl")
 
 
-const DEFAULT_ITER_TOL = 1e-4
+const DEFAULT_ITER_TOL = 1e-5
 const DEFAULT_ITER_MAX_ITERS = 100
-const DEFAULT_SOLVER_TOL = 1e-5
-const DEFAULT_SOLVER_MAX_ITERS = 400
+const DEFAULT_SOLVER_TOL = 1e-6
+const DEFAULT_SOLVER_MAX_ITERS = 200
 const EPSILON = 1e-8
 
 const TRUST_DELTA_INIT = 0.01
-const TRUST_DELTA_MAX = 1.
+const TRUST_DELTA_MAX = 0.1
 
 # ITERATING METHOD `solve_iters`
 
@@ -22,7 +22,7 @@ function single_iter_for_i(problem, strat, i, init_guess)
     jac_!(var, x) = jac!(var, exp.(x))
     # if init_guess is zero-effort, try breaking out
     if all(init_guess .== 0.)
-        init_guess .= 1.
+        init_guess .= EPSILON
     end
     res = optimize(
         obj_, jac_!,
@@ -33,22 +33,23 @@ function single_iter_for_i(problem, strat, i, init_guess)
             iterations = DEFAULT_SOLVER_MAX_ITERS
         )
     )
-    # check the zero-input payoff
-    zero_payoff = if any(problem.prodFunc.θ .> 0.)
-        x = copy(strat)
-        x[i, :] = [0., 0.]
-        (_, p) = f(problem.prodFunc, x[:, 1], x[:, 2])
-        # safety in this case is ∞
-        reward(problem.csf, i, p)
-    else
-        # safety is 0
-        -problem.d[i]
-    end
-    if zero_payoff > -Optim.minimum(res)
-        return [0., 0.]
-    else
-        return exp.(Optim.minimizer(res))
-    end
+    # # check the zero-input payoff
+    # zero_payoff = if any(problem.prodFunc.θ .> 0.)
+    #     x = copy(strat)
+    #     x[i, :] = [0., 0.]
+    #     (_, p) = f(problem.prodFunc, x[:, 1], x[:, 2])
+    #     # safety in this case is ∞
+    #     reward(problem.csf, i, p)
+    # else
+    #     # safety is 0
+    #     -problem.d[i]
+    # end
+    # if zero_payoff > -Optim.minimum(res)
+    #     return [0., 0.]
+    # else
+    #     return exp.(Optim.minimizer(res))
+    # end
+    return exp.(Optim.minimizer(res))
 end
 
 function solve_iters_single(problem::Problem, strat::Array)
@@ -86,7 +87,7 @@ end
 
 function solve_iters(
     problem::Problem;
-    init_guess::Number = EPSILON,
+    init_guess::Number = 1.,
     max_iters = DEFAULT_ITER_MAX_ITERS,
     tol = DEFAULT_ITER_TOL,
     verbose = false
@@ -98,7 +99,7 @@ end
 # ITERATING GRID SOLVER METHOD `solve_grid`
 
 function search_grid_for_best(problem::Problem, strat::Array, i, lower, upper, grid_size)
-    # step = (upper - lower) / (grid_size - 1)
+    step = (upper - lower) / (grid_size - 1)
     best_x = strat[i, :]
     best_payoff = payoff(problem, i, strat[:, 1], strat[:, 2])
     x = copy(strat)
@@ -157,7 +158,7 @@ end
 
 function solve_grid(
     problem::Problem,
-    init_guess::Number = EPSILON;
+    init_guess::Number = 1.;
     lower = -5., upper = 5.,
     grid_size = 20,
     max_iters = DEFAULT_ITER_MAX_ITERS,
@@ -169,6 +170,44 @@ function solve_grid(
         lower, upper, grid_size,
         max_iters, tol, verbose
     )
+end
+
+
+# SCATTER ITERATING METHOD:
+# Runs iter_solve from multiple init points and compares results
+
+function solve_scatter(
+    problem::Problem;
+    max_iters = DEFAULT_ITER_MAX_ITERS,
+    tol = DEFAULT_ITER_TOL,
+    verbose = false,
+    n_init_points = 10,
+    init_mu = 0.,
+    init_sigma = 1.
+)
+    # draw init points from log-normal distribution
+    init_points = exp.(init_mu .+ init_sigma .* randn(n_init_points, problem.n, 2))
+    results = SolverResult[]
+    Threads.@threads for i in 1:n_init_points
+        result = solve_iters(
+            problem,
+            init_points[i, :, :],
+            max_iters = max_iters,
+            tol = tol,
+            verbose = verbose
+        )
+        if result.success
+            push!(results, result)
+        end
+    end
+    if length(results) == 0
+        println("None of the solver iterations converged.")
+        return get_null_result(problemn.n)
+    end
+    combined_sols = sum([make_3d(r, problem.n) for r in results])
+    return combined_sols
+    # print(combined_sols)
+    # return resolve_multiple_solutions(prune_duplicates(combined_sols), problem)
 end
 
 
