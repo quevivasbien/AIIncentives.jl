@@ -4,10 +4,10 @@ using NLsolve
 include("./Problem.jl")
 
 
-const DEFAULT_ITER_TOL = 1e-5
+const DEFAULT_ITER_TOL = 1e-6
 const DEFAULT_ITER_MAX_ITERS = 100
-const DEFAULT_SOLVER_TOL = 1e-6
-const DEFAULT_SOLVER_MAX_ITERS = 200
+const DEFAULT_SOLVER_TOL = 1e-8
+const DEFAULT_SOLVER_MAX_ITERS = 500
 const EPSILON = 1e-8
 
 const TRUST_DELTA_INIT = 0.01
@@ -22,7 +22,7 @@ function single_iter_for_i(problem, strat, i, init_guess)
     jac_!(var, x) = jac!(var, exp.(x))
     # if init_guess is zero-effort, try breaking out
     if all(init_guess .== 0.)
-        init_guess .= EPSILON
+        init_guess = exp.(randn(2))
     end
     res = optimize(
         obj_, jac_!,
@@ -33,23 +33,22 @@ function single_iter_for_i(problem, strat, i, init_guess)
             iterations = DEFAULT_SOLVER_MAX_ITERS
         )
     )
-    # # check the zero-input payoff
-    # zero_payoff = if any(problem.prodFunc.θ .> 0.)
-    #     x = copy(strat)
-    #     x[i, :] = [0., 0.]
-    #     (_, p) = f(problem.prodFunc, x[:, 1], x[:, 2])
-    #     # safety in this case is ∞
-    #     reward(problem.csf, i, p)
-    # else
-    #     # safety is 0
-    #     -problem.d[i]
-    # end
-    # if zero_payoff > -Optim.minimum(res)
-    #     return [0., 0.]
-    # else
-    #     return exp.(Optim.minimizer(res))
-    # end
-    return exp.(Optim.minimizer(res))
+    # check the zero-input payoff
+    zero_payoff = if any(problem.prodFunc.θ .> 0.)
+        x = copy(strat)
+        x[i, :] = [0., 0.]
+        (_, p) = f(problem.prodFunc, x[:, 1], x[:, 2])
+        # safety in this case is ∞
+        reward(problem.csf, i, p)
+    else
+        # safety is 0
+        -problem.d[i]
+    end
+    if zero_payoff > -Optim.minimum(res)
+        return [0., 0.]
+    else
+        return exp.(Optim.minimizer(res))
+    end
 end
 
 function solve_iters_single(problem::Problem, strat::Array)
@@ -103,15 +102,6 @@ function search_grid_for_best(problem::Problem, strat::Array, i, lower, upper, g
     best_x = strat[i, :]
     best_payoff = payoff(problem, i, strat[:, 1], strat[:, 2])
     x = copy(strat)
-    # for _ in 1:grid_size
-    #     x[i, :] = exp.(rand(2) .* (upper - lower) .+ lower)
-    #     new_payoff = payoff(problem, i, x[:, 1], x[:, 2])
-    #     if new_payoff > best_payoff
-    #         best_payoff = new_payoff
-    #         best_x = x[i, :]
-    #         # println(best_x)
-    #     end
-    # end
     for log_Xs in lower:step:upper
         x[i, 1] = exp(log_Xs)
         for log_Xp in lower:step:upper
@@ -202,12 +192,10 @@ function solve_scatter(
     end
     if length(results) == 0
         println("None of the solver iterations converged.")
-        return get_null_result(problemn.n)
+        return get_null_result(problem.n)
     end
     combined_sols = sum([make_3d(r, problem.n) for r in results])
     return combined_sols
-    # print(combined_sols)
-    # return resolve_multiple_solutions(prune_duplicates(combined_sols), problem)
 end
 
 
@@ -297,7 +285,82 @@ function solve_hybrid(
     combined_sols = sum([make_3d(r, problem.n) for r in results])
     return resolve_multiple_solutions(prune_duplicates(combined_sols), problem)
 end
-    
+
+
+# Solver for mixed strategy equilibria
+# Runs iterating solver over history of run
+
+function single_mixed_iter_for_i(problem, history, i, init_guess)
+    objs = [get_func(problem, i, history[:, :, j]) for j in size(history, 3)]
+    obj_(x) = sum(obj(exp.(x)) for obj in objs)
+    jacs = [get_jac(problem, i, history[:, :, j], inplace = false) for j in size(history, 3)]
+    jac_!(var, x) = copy!(var, sum(jac(exp.(x)) for jac in jacs))
+    # if init_guess is zero-effort, try breaking out
+    if all(init_guess .== 0.)
+        init_guess = exp.(randn(2))
+    end
+    res = optimize(
+        obj_, jac_!,
+        log.(init_guess),
+        NewtonTrustRegion(initial_delta = TRUST_DELTA_INIT, delta_hat = TRUST_DELTA_MAX),
+        Optim.Options(
+            x_tol = DEFAULT_SOLVER_TOL,
+            iterations = DEFAULT_SOLVER_MAX_ITERS
+        )
+    )
+    # check the zero-input payoff
+    zero_payoff = obj_([0., 0.])
+    if zero_payoff > -Optim.minimum(res)
+        return [0., 0.]
+    else
+        return exp.(Optim.minimizer(res))
+    end
+end
+
+function single_mixed_iter(problem, history, init_guess)
+    new_strat = Array{Float64}(undef, problem.n, 2)
+    for i in 1:problem.n
+        new_strat[i, :] = single_mixed_iter_for_i(problem, history, i, init_guess[i, :])
+    end
+    return new_strat
+end
+
+function solve_mixed(
+    problem::Problem;
+    history_size = 20,
+    max_iters = DEFAULT_ITER_MAX_ITERS,
+    tol = DEFAULT_ITER_TOL,
+    init_mu = 0.,
+    init_sigma = 1.,
+    verbose = false
+)
+    # draw init points from log-normal distribution
+    history = exp.(init_mu .+ init_sigma .* randn(problem.n, 2, history_size))
+    for i in 1:max_iters
+        last_history = copy(history)
+        for t in 1:history_size
+            # on each iter, solve to maximize average payoff given current history
+            # replace one of the history entries with new optimum
+            # why in the world doesn't julia just use 0-based indexing???
+            history[:, :, t] = single_mixed_iter(problem, history, history[:, :, t])
+        end
+        if maximum((history .- last_history) ./ (last_history .+ EPSILON)) < tol
+            if verbose
+                println("Exited on iteration $i")
+            end
+            break
+        end
+    end
+    result = sum(
+        make_3d(
+            SolverResult(problem, true, history[:, 1, i], history[:, 2, i], prune = false),
+            problem.n
+        )
+        for i in 1:history_size
+    )
+    return result
+end
+
     
 function test()
     println("Running test on `solve.jl`...")

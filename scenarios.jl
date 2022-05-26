@@ -26,6 +26,12 @@ Scenario(
 ) = Scenario(n_players, A, α, B, β, θ, d, r, CSF(w, l, a_w, a_l), varying_param, secondary_varying_param)
 
 
+struct ScenarioResult
+    result::Array{SolverResult}
+    plot::Plots.Plot
+end
+
+
 # Functions for plotting with only single varying param
 
 function get_values_for_plot(results::Vector{SolverResult})
@@ -356,6 +362,13 @@ function get_result(problem, max_iters, tol, verbose, method)
             tol = tol,
             verbose = verbose
         )
+    elseif method == :mixed
+        return solve_mixed(
+            problem,
+            max_iters = max_iters,
+            tol = tol,
+            verbose = verbose
+        )
     else
         # implicitly method == :hybrid by default
         return solve_hybrid(
@@ -379,6 +392,10 @@ function solve_with_secondary_variation(
     tol,
     verbose
 )
+    if method == :scatter || method == :mixed
+        println("Secondary variation is unsupported with the mixed or scatter solvers.")
+        return ScenarioResult(SolverResult[], plot())
+    end
     varying_param_ = getfield(scenario, scenario.varying_param)
     varying_param = size(varying_param_)[1] == 1 ? repeat(varying_param_, scenario.n_players) : varying_param_
     n_steps = size(varying_param)[2]
@@ -426,7 +443,7 @@ function solve_with_secondary_variation(
 
     xaxis = varying_param[1, :] == varying_param[2, :] ? varying_param[1, :] : 1:n_steps
     labels = ["$(scenario.secondary_varying_param) = $(secondary_varying_param[:, i])" for i in 1:n_steps_secondary]
-    return create_plot(
+    plt = create_plot(
         results,
         xaxis,
         scenario.varying_param,
@@ -436,6 +453,7 @@ function solve_with_secondary_variation(
         title,
         logscale
     )
+    return ScenarioResult(results, plt)
 end
 
 
@@ -508,8 +526,9 @@ function solve(
 
     xaxis = varying_param[1, :] == varying_param[2, :] ? varying_param[1, :] : 1:n_steps
     labels = ["player $i" for i in 1:n_steps]
-    create_plot_ = method == :scatter ? create_scatterplot : create_plot
-    return create_plot_(results, xaxis, scenario.varying_param, plotname, plotsize, labels, title, logscale)
+    create_plot_ = method == :scatter || method == :mixed ? create_scatterplot : create_plot
+    plt = create_plot_(results, xaxis, scenario.varying_param, plotname, plotsize, labels, title, logscale)
+    return ScenarioResult(results, plt)
 end
 
 
