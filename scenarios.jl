@@ -1,4 +1,4 @@
-using Plots
+using Plots, Plots.PlotMeasures
 include("./solve.jl")
 
 
@@ -49,7 +49,7 @@ function get_values_for_plot(results::Vector{SolverResult})
     return s, p, total_safety, payoffs
 end
 
-function create_plot(results::Vector{SolverResult}, xaxis, xlabel, plotname, plotsize, labels, title, logscale)
+function create_plot(results::Vector{SolverResult}, xaxis, xlabel, saveas, plotsize, labels, title, logscale)
     (s, p, total_safety, payoffs) = get_values_for_plot(results)
     labels_ = reshape(labels, 1, :)
     perf_plt = plot(xaxis, p, xlabel = xlabel, ylabel = "performance", labels = labels_)
@@ -63,50 +63,74 @@ function create_plot(results::Vector{SolverResult}, xaxis, xlabel, plotname, plo
     final_plot = plot(
         perf_plt, safety_plt, total_safety_plt, payoff_plt,
         layout = (2, 2), size = plotsize, legend_font_pointsize = 6,
-        legend_background_color = RGBA(1., 1., 1., 0.5)
+        legend_background_color = RGBA(1., 1., 1., 0.5),
+        left_margin = 20px
     )
-    if title != nothing
+    if !isnothing(title)
         title!(title)
     end
-    if plotname != nothing
-        Plots.savefig("$(plotname).png")
+    if !isnothing(saveas)
+        Plots.savefig("$(saveas).png")
     end
     return final_plot
 end
 
 # functions for plotting with single varying param, scatterplot instead of line plot (for when multiple solutions are found)
 
-function get_values_for_scatterplot(results::Vector{SolverResult}, xaxis)
-    xaxis_ = vcat((fill(x, size(r.Xs)[1]) for (x, r) in zip(xaxis, results))...)
-    s = vcat((r.s for r in results)...)
-    p = vcat((r.p for r in results)...)
-    payoffs = vcat((r.payoffs for r in results)...)
-    total_safety = get_total_safety(s)
-    return xaxis_, s, p, total_safety, payoffs
+function get_values_for_scatterplot(results::Vector{SolverResult}, xaxis; take_avg = false)
+    if !take_avg
+        xaxis_ = vcat((fill(x, size(r.Xs, 1)) for (x, r) in zip(xaxis, results))...)
+        Xs = vcat((r.Xs for r in results)...)
+        Xp = vcat((r.Xp for r in results)...)
+        s = vcat((r.s for r in results)...)
+        p = vcat((r.p for r in results)...)
+        payoffs = vcat((r.payoffs for r in results)...)
+        total_safety = get_total_safety(s)
+        return xaxis_, Xs, Xp, s, p, total_safety, payoffs
+    else
+        Xs = vcat((mean(r.Xs, dims = 1) for r in results)...)
+        Xp = vcat((mean(r.Xp, dims = 1) for r in results)...)
+        s = vcat((mean(r.s, dims = 1) for r in results)...)
+        p = vcat((mean(r.p, dims = 1) for r in results)...)
+        payoffs = vcat((mean(r.payoffs, dims = 1) for r in results)...)
+        total_safety = vcat((mean(get_total_safety(r.s), dims = 1) for r in results)...)
+        return transpose(xaxis), Xs, Xp, s, p, total_safety, payoffs
+    end
 end
 
-function create_scatterplot(results::Vector{SolverResult}, xaxis, xlabel, plotname, plotsize, labels, title, logscale)
-    (xaxis_, s, p, total_safety, payoffs) = get_values_for_scatterplot(results, xaxis)
+function create_scatterplot(
+    results::Vector{SolverResult}, xaxis, xlabel,
+    saveas, plotsize, labels, title, logscale;
+    take_avg = false
+)
+    (xaxis_, Xs, Xp, s, p, total_safety, payoffs) = get_values_for_scatterplot(results, xaxis, take_avg = take_avg)
     labels_ = reshape(labels, 1, :)
+    Xp_plt = scatter(xaxis_, Xp, xlabel = xlabel, ylabel = "Xₚ", labels = labels_)
+    Xs_plt = scatter(xaxis_, Xs, xlabel = xlabel, ylabel = "Xₛ", labels = labels_)
     perf_plt = scatter(xaxis_, p, xlabel = xlabel, ylabel = "performance", labels = labels_)
     safety_plt = scatter(xaxis_, s, xlabel = xlabel, ylabel = "safety", labels = labels_)
     if logscale
+        yaxis!(Xp_plt, :log10)
+        yaxis!(Xs_plt, :log10)
         yaxis!(perf_plt, :log10)
         yaxis!(safety_plt, :log10)
     end
     total_safety_plt = scatter(xaxis_, total_safety, xlabel = xlabel, ylabel = "σ", label = nothing)
     payoff_plt = scatter(xaxis_, payoffs, xlabel = xlabel, ylabel = "payoff", labels = labels_)
     final_plot = plot(
-        perf_plt, safety_plt, total_safety_plt, payoff_plt,
-        layout = (2, 2), size = plotsize, legend_font_pointsize = 6,
+        Xp_plt, Xs_plt,
+        perf_plt, safety_plt,
+        total_safety_plt, payoff_plt,
+        layout = (3, 2), size = (plotsize[1], plotsize[2] * 1.5), legend_font_pointsize = 6,
         legend_background_color = RGBA(1., 1., 1., 0.5),
-        markeralpha = 0.25, markerstrokealpha = 0.
+        markeralpha = 0.25, markerstrokealpha = 0.,
+        left_margin = 20px
     )
-    if title != nothing
+    if !isnothing(title)
         title!(title)
     end
-    if plotname != nothing
-        Plots.savefig("$(plotname).png")
+    if !isnothing(saveas)
+        Plots.savefig("$(saveas).png")
     end
     return final_plot
 end
@@ -176,7 +200,7 @@ function are_players_same(results::Array{SolverResult, 2})
 end
 
 function mean(x; dims)
-    sum(x, dims = dims) ./ size(x)[dims]
+    sum(x, dims = dims) ./ size(x, dims)
 end
 
 function _plot_helper_same(xaxis, s, p, total_safety, payoffs, xlabel, labels)
@@ -298,7 +322,7 @@ function _plot_helper_het(xaxis, s, p, total_safety, payoffs, xlabel, labels)
 end
 
 
-function create_plot(results::Array{SolverResult, 2}, xaxis, xlabel, plotname, plotsize, labels, title, logscale)
+function create_plot(results::Array{SolverResult, 2}, xaxis, xlabel, saveas, plotsize, labels, title, logscale)
     (s, p, total_safety, payoffs) = get_values_for_plot(results)
     players_same = are_players_same(results)
     (perf_plt, safety_plt, total_safety_plt, payoff_plt) = if players_same
@@ -314,24 +338,24 @@ function create_plot(results::Array{SolverResult, 2}, xaxis, xlabel, plotname, p
     final_plot = plot(
         perf_plt, safety_plt, total_safety_plt, payoff_plt,
         layout = (2, 2), size = plotsize, legend_font_pointsize = 6,
-        legend_background_color = RGBA(1., 1., 1., 0.5)
+        legend_background_color = RGBA(1., 1., 1., 0.5),
+        left_margin = 20px
     )
-    if title != nothing
+    if !isnothing(title)
         title!(title)
     end
-    if plotname != nothing
-        Plots.savefig("$(plotname).png")
+    if !isnothing(saveas)
+        Plots.savefig("$(saveas).png")
     end
     return final_plot
 end
 
 
 function linspace(start, stop, steps, reps = 1)
-    stepsize = (stop - start) / (steps - 1)
-    return transpose(repeat(start:stepsize:stop, outer = (1, reps)))
+    return transpose(repeat(range(start, stop=stop, length=steps), outer = (1, reps)))
 end
 
-function get_result(problem, max_iters, tol, verbose, method)
+function get_result(problem, max_iters, tol, verbose, method; n_init_points = 20)
     if method == :iters
         return solve_iters(
             problem,
@@ -342,32 +366,28 @@ function get_result(problem, max_iters, tol, verbose, method)
     elseif method == :roots
         return solve_roots(problem)
     elseif method == :grid
-        # return solve_hybrid(
-        #     problem,
-        #     iterating_method = solve_grid,
-        #     max_iters = max_iters,
-        #     tol = tol,
-        #     verbose = verbose
-        # )
         return solve_grid(
             problem,
             max_iters = max_iters,
             tol = tol,
-            verbose = verbose
+            verbose = verbose,
+            grid_size = n_init_points
         )
     elseif method == :scatter
         return solve_scatter(
             problem,
             max_iters = max_iters,
             tol = tol,
-            verbose = verbose
+            verbose = verbose,
+            n_init_points = n_init_points
         )
     elseif method == :mixed
         return solve_mixed(
             problem,
             max_iters = max_iters,
             tol = tol,
-            verbose = verbose
+            verbose = verbose,
+            history_size = n_init_points
         )
     else
         # implicitly method == :hybrid by default
@@ -383,7 +403,7 @@ end
 
 function solve_with_secondary_variation(
     scenario::Scenario,
-    plotname,
+    saveas,
     plotsize,
     title,
     logscale,
@@ -447,7 +467,7 @@ function solve_with_secondary_variation(
         results,
         xaxis,
         scenario.varying_param,
-        plotname,
+        saveas,
         plotsize,
         labels,
         title,
@@ -459,19 +479,20 @@ end
 
 function solve(
     scenario::Scenario;
-    plotname = nothing,  # if set to string, will save fig as .png
+    saveas = nothing,  # if set to string, will save fig as .png
     plotsize = (900, 600),
     title = nothing,
     logscale = false,
     method = :hybrid,
     max_iters = DEFAULT_ITER_MAX_ITERS,
     tol = DEFAULT_ITER_TOL,
+    n_init_points = 20,
     verbose = false
 )
-    if scenario.secondary_varying_param != nothing
+    if !isnothing(scenario.secondary_varying_param)
         return solve_with_secondary_variation(
             scenario,
-            plotname,
+            saveas,
             plotsize,
             title,
             logscale,
@@ -518,7 +539,7 @@ function solve(
     Threads.@threads for i in 1:n_steps
         prodFunc = ProdFunc(A[:, i], α[:, i], B[:, i], β[:, i], θ[:, i])
         problem = Problem(d[:, i], r[:, i],  prodFunc, scenario.csf)
-        results[i] = get_result(problem, max_iters, tol, verbose, method)
+        results[i] = get_result(problem, max_iters, tol, verbose, method; n_init_points = n_init_points)
     end
     if verbose
         print.(results)
@@ -527,7 +548,7 @@ function solve(
     xaxis = varying_param[1, :] == varying_param[2, :] ? varying_param[1, :] : 1:n_steps
     labels = ["player $i" for i in 1:n_steps]
     create_plot_ = method == :scatter || method == :mixed ? create_scatterplot : create_plot
-    plt = create_plot_(results, xaxis, scenario.varying_param, plotname, plotsize, labels, title, logscale)
+    plt = create_plot_(results, xaxis, scenario.varying_param, saveas, plotsize, labels, title, logscale)
     return ScenarioResult(results, plt)
 end
 
