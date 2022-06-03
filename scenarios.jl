@@ -27,8 +27,13 @@ Scenario(
 
 
 struct ScenarioResult
-    result::Array{SolverResult}
-    plot::Plots.Plot
+    scenario::Scenario
+    solverResults::Array{SolverResult}
+end
+
+
+function mean(x; dims)
+    sum(x, dims = dims) ./ size(x, dims)
 end
 
 
@@ -36,7 +41,7 @@ end
 
 function get_values_for_plot(results::Vector{SolverResult})
     n_steps = length(results)
-    n_players = size(results[1].Xs)[1]
+    n_players = size(results[1].Xs, 1)
     s = Array{Float64}(undef, n_steps, n_players)
     p = similar(s)
     payoffs = similar(s)
@@ -49,7 +54,7 @@ function get_values_for_plot(results::Vector{SolverResult})
     return s, p, total_safety, payoffs
 end
 
-function create_plot(results::Vector{SolverResult}, xaxis, xlabel, saveas, plotsize, labels, title, logscale)
+function create_plot(results::Vector{SolverResult}, xaxis, xlabel, plotsize, labels, title, logscale)
     (s, p, total_safety, payoffs) = get_values_for_plot(results)
     labels_ = reshape(labels, 1, :)
     perf_plt = plot(xaxis, p, xlabel = xlabel, ylabel = "performance", labels = labels_)
@@ -68,9 +73,6 @@ function create_plot(results::Vector{SolverResult}, xaxis, xlabel, saveas, plots
     )
     if !isnothing(title)
         title!(title)
-    end
-    if !isnothing(saveas)
-        Plots.savefig("$(saveas).png")
     end
     return final_plot
 end
@@ -94,13 +96,13 @@ function get_values_for_scatterplot(results::Vector{SolverResult}, xaxis; take_a
         p = vcat((mean(r.p, dims = 1) for r in results)...)
         payoffs = vcat((mean(r.payoffs, dims = 1) for r in results)...)
         total_safety = vcat((mean(get_total_safety(r.s), dims = 1) for r in results)...)
-        return transpose(xaxis), Xs, Xp, s, p, total_safety, payoffs
+        return xaxis, Xs, Xp, s, p, total_safety, payoffs
     end
 end
 
 function create_scatterplot(
     results::Vector{SolverResult}, xaxis, xlabel,
-    saveas, plotsize, labels, title, logscale;
+    plotsize, labels, title, logscale;
     take_avg = false
 )
     (xaxis_, Xs, Xp, s, p, total_safety, payoffs) = get_values_for_scatterplot(results, xaxis, take_avg = take_avg)
@@ -128,9 +130,6 @@ function create_scatterplot(
     )
     if !isnothing(title)
         title!(title)
-    end
-    if !isnothing(saveas)
-        Plots.savefig("$(saveas).png")
     end
     return final_plot
 end
@@ -165,7 +164,7 @@ end
 
 function get_values_for_plot(results::Array{SolverResult, 2})
     (n_steps_secondary, n_steps) = size(results)
-    n_players = size(results[1, 1].Xs)[1]
+    n_players = size(results[1, 1].Xs, 1)
     s = Array{Float64}(undef, n_steps_secondary, n_steps, n_players)
     p = similar(s)
     payoffs = similar(s)
@@ -199,9 +198,6 @@ function are_players_same(results::Array{SolverResult, 2})
     )
 end
 
-function mean(x; dims)
-    sum(x, dims = dims) ./ size(x, dims)
-end
 
 function _plot_helper_same(xaxis, s, p, total_safety, payoffs, xlabel, labels)
     n_steps_secondary = size(s)[1]
@@ -322,7 +318,7 @@ function _plot_helper_het(xaxis, s, p, total_safety, payoffs, xlabel, labels)
 end
 
 
-function create_plot(results::Array{SolverResult, 2}, xaxis, xlabel, saveas, plotsize, labels, title, logscale)
+function create_plot(results::Array{SolverResult, 2}, xaxis, xlabel, plotsize, labels, title, logscale)
     (s, p, total_safety, payoffs) = get_values_for_plot(results)
     players_same = are_players_same(results)
     (perf_plt, safety_plt, total_safety_plt, payoff_plt) = if players_same
@@ -344,9 +340,6 @@ function create_plot(results::Array{SolverResult, 2}, xaxis, xlabel, saveas, plo
     if !isnothing(title)
         title!(title)
     end
-    if !isnothing(saveas)
-        Plots.savefig("$(saveas).png")
-    end
     return final_plot
 end
 
@@ -355,72 +348,36 @@ function linspace(start, stop, steps, reps = 1)
     return transpose(repeat(range(start, stop=stop, length=steps), outer = (1, reps)))
 end
 
-function get_result(problem, max_iters, tol, verbose, method; n_init_points = 20)
-    if method == :iters
-        return solve_iters(
-            problem,
-            max_iters = max_iters,
-            tol = tol,
-            verbose = verbose
-        )
+function get_result(problem, method, options)
+    if method == :hybrid
+        return solve_hybrid(problem, options = options)
     elseif method == :roots
-        return solve_roots(problem)
-    elseif method == :grid
-        return solve_grid(
-            problem,
-            max_iters = max_iters,
-            tol = tol,
-            verbose = verbose,
-            grid_size = n_init_points
-        )
+        return solve_roots(problem, ftol = options.solver_tol)
     elseif method == :scatter
-        return solve_scatter(
-            problem,
-            max_iters = max_iters,
-            tol = tol,
-            verbose = verbose,
-            n_init_points = n_init_points
-        )
+        return solve_scatter(problem; options)
     elseif method == :mixed
-        return solve_mixed(
-            problem,
-            max_iters = max_iters,
-            tol = tol,
-            verbose = verbose,
-            history_size = n_init_points
-        )
+        return solve_mixed(problem; options)
     else
-        # implicitly method == :hybrid by default
-        return solve_hybrid(
-            problem,
-            max_iters = max_iters,
-            tol = tol,
-            verbose = verbose
-        )
+        # implicitly method == :iters by default
+        return solve_iters(problem; options)
     end
 end
 
 
 function solve_with_secondary_variation(
     scenario::Scenario,
-    saveas,
-    plotsize,
-    title,
-    logscale,
     method,
-    max_iters,
-    tol,
-    verbose
+    options
 )
     if method == :scatter || method == :mixed
         println("Secondary variation is unsupported with the mixed or scatter solvers.")
         return ScenarioResult(SolverResult[], plot())
     end
     varying_param_ = getfield(scenario, scenario.varying_param)
-    varying_param = size(varying_param_)[1] == 1 ? repeat(varying_param_, scenario.n_players) : varying_param_
-    n_steps = size(varying_param)[2]
+    varying_param = size(varying_param_, 1) == 1 ? repeat(varying_param_, scenario.n_players) : varying_param_
+    n_steps = size(varying_param, 2)
     secondary_varying_param = getfield(scenario, scenario.secondary_varying_param)
-    n_steps_secondary = size(secondary_varying_param)[2]
+    n_steps_secondary = size(secondary_varying_param, 2)
     # create stacks of variables to send to solver
     # everything needs to have shape n_players x n_steps x n_steps_secondary
     A = similar(scenario.A, (scenario.n_players, n_steps, n_steps_secondary))
@@ -454,58 +411,33 @@ function solve_with_secondary_variation(
         Threads.@threads for j in 1:n_steps_secondary
             prodFunc = ProdFunc(A[:, i, j], α[:, i, j], B[:, i, j], β[:, i, j], θ[:, i, j])
             problem = Problem(d[:, i, j], r[:, i, j],  prodFunc, scenario.csf)
-            results[j, i] = get_result(problem, max_iters, tol, verbose, method)
+            results[j, i] = get_result(problem, method, options)
         end
     end
-    if verbose
+    if options.verbose
         print.(results)
     end
 
-    xaxis = varying_param[1, :] == varying_param[2, :] ? varying_param[1, :] : 1:n_steps
-    labels = ["$(scenario.secondary_varying_param) = $(secondary_varying_param[:, i])" for i in 1:n_steps_secondary]
-    plt = create_plot(
-        results,
-        xaxis,
-        scenario.varying_param,
-        saveas,
-        plotsize,
-        labels,
-        title,
-        logscale
-    )
-    return ScenarioResult(results, plt)
+    return ScenarioResult(scenario, results)
 end
 
 
 function solve(
     scenario::Scenario;
-    saveas = nothing,  # if set to string, will save fig as .png
-    plotsize = (900, 600),
-    title = nothing,
-    logscale = false,
-    method = :hybrid,
-    max_iters = DEFAULT_ITER_MAX_ITERS,
-    tol = DEFAULT_ITER_TOL,
-    n_init_points = 20,
-    verbose = false
+    method = :iters,
+    options = DEFAULT_OPTIONS
 )
     if !isnothing(scenario.secondary_varying_param)
         return solve_with_secondary_variation(
             scenario,
-            saveas,
-            plotsize,
-            title,
-            logscale,
             method,
-            max_iters,
-            tol,
-            verbose
+            options
         )
     end
 
     varying_param_ = getfield(scenario, scenario.varying_param)
-    varying_param = size(varying_param_)[1] == 1 ? repeat(varying_param_, scenario.n_players) : varying_param_
-    n_steps = size(varying_param)[2]
+    varying_param = size(varying_param_, 1) == 1 ? repeat(varying_param_, scenario.n_players) : varying_param_
+    n_steps = size(varying_param, 2)
     
     A = similar(scenario.A, (scenario.n_players, n_steps))
     α = similar(scenario.α, (scenario.n_players, n_steps))
@@ -539,17 +471,72 @@ function solve(
     Threads.@threads for i in 1:n_steps
         prodFunc = ProdFunc(A[:, i], α[:, i], B[:, i], β[:, i], θ[:, i])
         problem = Problem(d[:, i], r[:, i],  prodFunc, scenario.csf)
-        results[i] = get_result(problem, max_iters, tol, verbose, method; n_init_points = n_init_points)
+        results[i] = get_result(problem, method, options)
     end
-    if verbose
+    if options.verbose
         print.(results)
     end
 
-    xaxis = varying_param[1, :] == varying_param[2, :] ? varying_param[1, :] : 1:n_steps
-    labels = ["player $i" for i in 1:n_steps]
-    create_plot_ = method == :scatter || method == :mixed ? create_scatterplot : create_plot
-    plt = create_plot_(results, xaxis, scenario.varying_param, saveas, plotsize, labels, title, logscale)
-    return ScenarioResult(results, plt)
+    return ScenarioResult(scenario, results)
+end
+
+
+function plot_result(
+    res::ScenarioResult;
+    plotsize = (900, 600),
+    title = nothing,
+    logscale = false,
+    take_avg = false
+)
+    varying_param = getfield(res.scenario, res.scenario.varying_param)
+    n_steps = size(varying_param, 2)
+    xaxis = if size(varying_param, 1) == 1
+        reshape(varying_param, :, 1)
+    elseif varying_param[1, :] == varying_param[2, :]
+        varying_param[1, :]
+    else
+        1:n_steps
+    end
+    plt = if isnothing(res.scenario.secondary_varying_param)
+        labels = ["player $i" for i in 1:res.scenario.n_players]
+        if ndims(res.solverResults[1].Xs) > 1
+            create_scatterplot(
+                res.solverResults,
+                xaxis,
+                res.scenario.varying_param,
+                plotsize, 
+                labels,
+                title,
+                logscale,
+                take_avg = take_avg
+            )
+        else
+            create_plot(
+                res.solverResults,
+                xaxis,
+                res.scenario.varying_param,
+                plotsize,
+                labels,
+                title,
+                logscale
+            )
+        end
+    else
+        secondary_varying_param = getfield(res.scenario, res.scenario.secondary_varying_param)
+        n_steps_secondary = size(secondary_varying_param, 2)
+        labels = ["$(res.scenario.secondary_varying_param) = $(secondary_varying_param[:, i])" for i in 1:n_steps_secondary]
+        create_plot(
+            res.solverResults,
+            xaxis,
+            res.scenario.varying_param,
+            plotsize,
+            labels,
+            title,
+            logscale
+        )
+    end
+
+    return plt
 end
 
 
@@ -566,5 +553,6 @@ function test(method = :hybrid)
 
     scenario = Scenario(2, A, α, B, β, θ, d, r, secondary_varying_param = :θ)
 
-    @time solve(scenario, method = method, verbose = true)
+    @time res = solve(scenario, method = method, options = IterOptions(verbose = true))
+    plot_result(res)
 end

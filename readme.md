@@ -27,7 +27,7 @@ subject to the other players' choices of *X_s* and *X_p*. Here *ρ<sub>i</sub>(p
 
 ## Instructions for use
 
-If you don't have Julia, download it from https://julialang.org/downloads/. You'll then need to install the packages that this project uses, which with Julia is luckily quite simple: open a console window, type `julia` to enter an interactive Julia session, then run
+If you don't have Julia, download it from https://julialang.org/downloads/ and install. You'll then need to install the packages that this project uses, which with Julia is luckily quite simple: open a console window, type `julia` to enter an interactive Julia session, then run
 ```julia
 using Pkg
 Pkg.add(["Optim", "NLSolve", "Plots"])

@@ -3,34 +3,61 @@ using NLsolve
 
 include("./Problem.jl")
 
+struct IterOptions
+    tol::Number
+    max_iters::Integer
+    solver_tol::Number
+    solver_max_iters::Integer
+    trust_delta_init::Number
+    trust_delta_max::Number
+    init_guess::Number
+    n_init_points::Integer
+    init_mu::Number
+    init_sigma::Number
+    verbose::Bool
+end
 
-const DEFAULT_ITER_TOL = 1e-6
-const DEFAULT_ITER_MAX_ITERS = 100
-const DEFAULT_SOLVER_TOL = 1e-8
-const DEFAULT_SOLVER_MAX_ITERS = 500
-const EPSILON = 1e-8
+IterOptions(
+    ;
+    tol::Number = 1e-6, max_iters::Integer = 1000,
+    solver_tol::Number = 1e-8, solver_max_iters::Integer = 500,
+    trust_delta_init::Number = 0.01, trust_delta_max::Number = 0.1,
+    init_guess::Number = 1., n_init_points::Integer = 20,
+    init_mu::Number = 0., init_sigma::Number = 1.,
+    verbose::Bool = false
+) = IterOptions(
+    tol, max_iters,
+    solver_tol, solver_max_iters,
+    trust_delta_init, trust_delta_max,
+    init_guess, n_init_points,
+    init_mu, init_sigma,
+    verbose
+)
 
-const TRUST_DELTA_INIT = 0.01
-const TRUST_DELTA_MAX = 0.1
+const DEFAULT_OPTIONS = IterOptions()
 
 # ITERATING METHOD `solve_iters`
 
-function single_iter_for_i(problem, strat, i, init_guess)
+function single_iter_for_i(
+    problem, strat, i, init_guess,
+    options = DEFAULT_OPTIONS
+)
     obj = get_func(problem, i, strat)
     obj_(x) = obj(exp.(x))
     jac! = get_jac(problem, i, strat, inplace = true)
     jac_!(var, x) = jac!(var, exp.(x))
     # if init_guess is zero-effort, try breaking out
     if all(init_guess .== 0.)
-        init_guess = exp.(randn(2))
+        init_guess = exp.(options.init_mu .+ options.init_sigma .* randn(2))
     end
     res = optimize(
         obj_, jac_!,
         log.(init_guess),
-        NewtonTrustRegion(initial_delta = TRUST_DELTA_INIT, delta_hat = TRUST_DELTA_MAX),
+        # NewtonTrustRegion(initial_delta = options.trust_delta_init, delta_hat = options.trust_delta_max),
+        LBFGS(),
         Optim.Options(
-            x_tol = DEFAULT_SOLVER_TOL,
-            iterations = DEFAULT_SOLVER_MAX_ITERS
+            x_tol = options.solver_tol,
+            iterations = options.solver_max_iters
         )
     )
     # check the zero-input payoff
@@ -51,34 +78,34 @@ function single_iter_for_i(problem, strat, i, init_guess)
     end
 end
 
-function solve_iters_single(problem::Problem, strat::Array)
+function solve_iters_single(
+    problem::Problem, strat::Array,
+    options = DEFAULT_OPTIONS
+)
     new_strats = similar(strat)
     for i in 1:problem.n
-        new_strats[i, :] = single_iter_for_i(problem, strat, i, strat[i, :])
+        new_strats[i, :] = single_iter_for_i(problem, strat, i, strat[i, :], options)
     end
     return new_strats
 end
     
 function solve_iters(
     problem::Problem,
-    init_guess::Array,
-    solve_single = solve_iters_single;
-    max_iters = DEFAULT_ITER_MAX_ITERS,
-    tol = DEFAULT_ITER_TOL,
-    verbose = false
+    init_guess::Array;
+    options = DEFAULT_OPTIONS
 )
     strat = init_guess
-    for t in 1:max_iters
-        new_strat = solve_single(problem, strat)
-        if maximum(abs.(new_strat - strat) ./ (strat .+ EPSILON)) < tol
-            if verbose
+    for t in 1:options.max_iters
+        new_strat = solve_iters_single(problem, strat, options)
+        if maximum(abs.(new_strat - strat) ./ (strat .+ EPSILON)) < options.tol
+            if options.verbose
                 println("Exited on iteration $t")
             end
             return SolverResult(problem, true, new_strat[:, 1], new_strat[:, 2], prune = false)
         end
         strat = new_strat
     end
-    if verbose
+    if options.verbose
         println("Reached max iterations")
     end
     return SolverResult(problem, false, strat[:, 1], strat[:, 2])
@@ -86,80 +113,9 @@ end
 
 function solve_iters(
     problem::Problem;
-    init_guess::Number = 1.,
-    max_iters = DEFAULT_ITER_MAX_ITERS,
-    tol = DEFAULT_ITER_TOL,
-    verbose = false
+    options = DEFAULT_OPTIONS
 )
-    return solve_iters(problem, fill(init_guess, (problem.n, 2)); max_iters, tol, verbose)
-end
-
-
-# ITERATING GRID SOLVER METHOD `solve_grid`
-
-function search_grid_for_best(problem::Problem, strat::Array, i, lower, upper, grid_size)
-    step = (upper - lower) / (grid_size - 1)
-    best_x = strat[i, :]
-    best_payoff = payoff(problem, i, strat[:, 1], strat[:, 2])
-    x = copy(strat)
-    for log_Xs in lower:step:upper
-        x[i, 1] = exp(log_Xs)
-        for log_Xp in lower:step:upper
-            x[i, 2] = exp(log_Xp)
-            new_payoff = payoff(problem, i, x[:, 1], x[:, 2])
-            if new_payoff > best_payoff
-                best_payoff = new_payoff
-                best_x = x[i, :]
-            end
-        end
-    end
-    return best_x
-end
-
-function solve_grid_single(
-    problem::Problem, strat::Array, lower, upper, grid_size
-)
-    new_strats = similar(strat)
-    for i in 1:problem.n
-        init_guess = search_grid_for_best(problem, strat, i, lower, upper, grid_size)
-        new_strats[i, :] = single_iter_for_i(problem, strat, i, init_guess)
-    end
-    return new_strats
-end
-
-function solve_grid(
-    problem::Problem,
-    init_guess::Array;
-    lower = -5., upper = 5.,
-    grid_size = 20,
-    max_iters = DEFAULT_ITER_MAX_ITERS,
-    tol = DEFAULT_ITER_TOL,
-    verbose = false
-)
-   return solve_iters(
-       problem,
-       init_guess,
-       (problem, strat) -> solve_grid_single(problem, strat, lower, upper, grid_size),
-       max_iters = max_iters,
-       tol = tol,
-       verbose = verbose
-   )
-end
-
-function solve_grid(
-    problem::Problem,
-    init_guess::Number = 1.;
-    lower = -5., upper = 5.,
-    grid_size = 20,
-    max_iters = DEFAULT_ITER_MAX_ITERS,
-    tol = DEFAULT_ITER_TOL,
-    verbose = false
-)
-    return solve_grid(
-        problem, fill(init_guess, problem.n, 2);
-        lower, upper, grid_size,
-        max_iters, tol, verbose
-    )
+    return solve_iters(problem, fill(options.init_guess, (problem.n, 2)); options)
 end
 
 
@@ -168,23 +124,16 @@ end
 
 function solve_scatter(
     problem::Problem;
-    max_iters = DEFAULT_ITER_MAX_ITERS,
-    tol = DEFAULT_ITER_TOL,
-    verbose = false,
-    n_init_points = 10,
-    init_mu = 0.,
-    init_sigma = 1.
+    options = DEFAULT_OPTIONS
 )
     # draw init points from log-normal distribution
-    init_points = exp.(init_mu .+ init_sigma .* randn(n_init_points, problem.n, 2))
+    init_points = exp.(options.init_mu .+ options.init_sigma .* randn(options.n_init_points, problem.n, 2))
     results = SolverResult[]
-    Threads.@threads for i in 1:n_init_points
+    Threads.@threads for i in 1:options.n_init_points
         result = solve_iters(
             problem,
-            init_points[i, :, :],
-            max_iters = max_iters,
-            tol = tol,
-            verbose = verbose
+            init_points[i, :, :];
+            options
         )
         if result.success
             push!(results, result)
@@ -250,14 +199,12 @@ end
 function solve_hybrid(
     problem::Problem;
     init_guesses::Vector{Float64} = [10.0^(3*i) for i in -2:2],
-    iterating_method = solve_iters,
-    max_iters = DEFAULT_ITER_MAX_ITERS, tol = DEFAULT_ITER_TOL,
-    verbose = false
+    options = DEFAULT_OPTIONS
 )
-    if verbose
+    if options.verbose
         println("Finding roots...")
     end
-    roots_sol = solve_roots(problem, init_guesses = init_guesses, ftol = 1e-4, resolve_multiple = false)
+    roots_sol = solve_roots(problem, init_guesses = init_guesses, ftol = options.solver_tol, resolve_multiple = false)
     if !roots_sol.success
         return roots_sol
     end
@@ -269,12 +216,12 @@ function solve_hybrid(
     )
     n_tries = size(strats)[1]
     results = SolverResult[]
-    if verbose
+    if options.verbose
         println("Iterating...")
     end
     Threads.@threads for i in 1:n_tries
         strats_ = copy(selectdim(strats, 1, i))
-        iter_sol = iterating_method(problem, strats_; max_iters, tol, verbose)
+        iter_sol = solve_iters(problem, strats_; options)
         if iter_sol.success
             push!(results, iter_sol)
         end
@@ -290,22 +237,23 @@ end
 # Solver for mixed strategy equilibria
 # Runs iterating solver over history of run
 
-function single_mixed_iter_for_i(problem, history, i, init_guess)
+function single_mixed_iter_for_i(problem, history, i, init_guess, options = DEFAULT_OPTIONS)
     objs = [get_func(problem, i, history[:, :, j]) for j in size(history, 3)]
     obj_(x) = sum(obj(exp.(x)) for obj in objs)
     jacs = [get_jac(problem, i, history[:, :, j], inplace = false) for j in size(history, 3)]
     jac_!(var, x) = copy!(var, sum(jac(exp.(x)) for jac in jacs))
     # if init_guess is zero-effort, try breaking out
     if all(init_guess .== 0.)
-        init_guess = exp.(randn(2))
+        init_guess = exp.(options.init_mu .+ options.init_sigma .* randn(2))
     end
     res = optimize(
         obj_, jac_!,
         log.(init_guess),
-        NewtonTrustRegion(initial_delta = TRUST_DELTA_INIT, delta_hat = TRUST_DELTA_MAX),
+        # NewtonTrustRegion(initial_delta = options.trust_delta_init, delta_hat = options.trust_delta_max),
+        LBFGS(),
         Optim.Options(
-            x_tol = DEFAULT_SOLVER_TOL,
-            iterations = DEFAULT_SOLVER_MAX_ITERS
+            x_tol = options.solver_tol,
+            iterations = options.solver_max_iters
         )
     )
     # check the zero-input payoff
@@ -317,35 +265,31 @@ function single_mixed_iter_for_i(problem, history, i, init_guess)
     end
 end
 
-function single_mixed_iter(problem, history, init_guess)
+function single_mixed_iter(problem, history, init_guess, options = DEFAULT_OPTIONS)
     new_strat = Array{Float64}(undef, problem.n, 2)
     for i in 1:problem.n
-        new_strat[i, :] = single_mixed_iter_for_i(problem, history, i, init_guess[i, :])
+        new_strat[i, :] = single_mixed_iter_for_i(problem, history, i, init_guess[i, :], options)
     end
     return new_strat
 end
 
 function solve_mixed(
     problem::Problem;
-    history_size = 20,
-    max_iters = DEFAULT_ITER_MAX_ITERS,
-    tol = DEFAULT_ITER_TOL,
-    init_mu = 0.,
-    init_sigma = 1.,
-    verbose = false
+    options = DEFAULT_OPTIONS
 )
     # draw init points from log-normal distribution
-    history = exp.(init_mu .+ init_sigma .* randn(problem.n, 2, history_size))
-    for i in 1:max_iters
+    history = exp.(options.init_mu .+ options.init_sigma .* randn(problem.n, 2, options.n_init_points))
+    for i in 1:options.max_iters
         last_history = copy(history)
-        for t in 1:history_size
+        for t in 1:options.n_init_points
             # on each iter, solve to maximize average payoff given current history
             # replace one of the history entries with new optimum
             # why in the world doesn't julia just use 0-based indexing???
-            history[:, :, t] = single_mixed_iter(problem, history, history[:, :, t])
+            history[:, :, t] = single_mixed_iter(problem, history, history[:, :, t], options)
         end
-        if maximum((history .- last_history) ./ (last_history .+ EPSILON)) < tol
-            if verbose
+        # todo: pretty sure this never triggers when strategy is mixed, since it compare the entire history, which fluctuates
+        if maximum((history .- last_history) ./ (last_history .+ EPSILON)) < options.tol
+            if options.verbose
                 println("Exited on iteration $i")
             end
             break
@@ -356,7 +300,7 @@ function solve_mixed(
             SolverResult(problem, true, history[:, 1, i], history[:, 2, i], prune = false),
             problem.n
         )
-        for i in 1:history_size
+        for i in 1:options.n_init_points
     )
     return result
 end
