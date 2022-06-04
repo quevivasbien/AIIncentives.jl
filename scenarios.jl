@@ -32,6 +32,12 @@ struct ScenarioResult
 end
 
 
+# Helper functions
+
+function linspace(start, stop, steps, reps = 1)
+    return transpose(repeat(range(start, stop=stop, length=steps), outer = (1, reps)))
+end
+
 function mean(x; dims)
     sum(x, dims = dims) ./ size(x, dims)
 end
@@ -343,10 +349,78 @@ function create_plot(results::Array{SolverResult, 2}, xaxis, xlabel, plotsize, l
     return final_plot
 end
 
+# FUNCTIONS FOR PLOTTING PAYOFFS (TO VISUALLY VERIFY EQUILIBRIUM)
 
-function linspace(start, stop, steps, reps = 1)
-    return transpose(repeat(range(start, stop=stop, length=steps), outer = (1, reps)))
+function plot_payoffs_with_xs(
+    problem, base_Xs, base_Xp, i;
+    min_Xp = 0.001, max_Xp = 1., n_Xp = 40,
+    logscale = false
+)
+    Xp = if logscale
+        exp.(range(log(min_Xp), stop = log(max_Xp), length = n_Xp))
+    else
+        range(min_Xp, stop = max_Xp, length = n_Xp)
+    end
+    function f(xp)
+        Xp_ = copy(vec(base_Xp))
+        Xp_[i] = xp
+        payoff(problem, i, vec(base_Xs), Xp_)
+    end
+    plot(Xp, f, xlabel = "Xₚ", ylabel = "payoff", legend = nothing)
+    scatter!([base_Xp[i]], [f(base_Xp[i])])
+    title!("Player $i")
 end
+
+function plot_payoffs_with_xp(
+    problem, base_Xs, base_Xp, i;
+    min_Xs = 0.001, max_Xs = 1., n_Xs = 40,
+    logscale = false
+)
+    Xs = if logscale
+        exp.(range(log(min_Xs), stop = log(max_Xs), length = n_Xs))
+    else
+        range(min_Xp, stop = max_Xp, length = n_Xp)
+    end
+    function f(xs)
+        Xs_ = copy(vec(base_Xs))
+        Xs_[i] = xs
+        payoff(problem, i, Xs_, vec(base_Xp))
+    end
+    plot(Xs, f, xlabel = "Xₛ", ylabel = "payoff", legend = nothing)
+    scatter!([base_Xs[i]], [f(base_Xs[i])])
+    title!("Player $i")
+end
+
+
+function plot_payoffs(
+    problem, base_Xs, base_Xp, i;
+    min_Xs = 0.001, max_Xs = 1., n_Xs = 40,
+    min_Xp = 0.001, max_Xp = 1., n_Xp = 40,
+    logscale = false
+)
+    (Xs, Xp) = if logscale
+        (
+            exp.(range(log(min_Xs), stop = log(max_Xs), length = n_Xs)),
+            exp.(range(log(min_Xp), stop = log(max_Xp), length = n_Xp))
+        )
+    else
+        (
+            range(min_Xs, stop = max_Xs, length = n_Xs),
+            range(min_Xp, stop = max_Xp, length = n_Xp)
+        )
+    end
+    function f(xs, xp)
+        Xs_ = copy(vec(base_Xs)); Xp_ = copy(vec(base_Xp))
+        Xs_[i] = xs; Xp_[i] = xp
+        payoff(problem, i, Xs_, Xp_)
+    end
+    heatmap(Xs, Xp, f, xlabel = "Xₛ", ylabel = "Xₚ")
+    scatter!([base_Xs[i]], [base_Xp[i]], legend = nothing)
+    title!("Player $i")
+end
+
+
+# SOLVER FUNCTIONS:
 
 function get_result(problem, method, options)
     if method == :hybrid
