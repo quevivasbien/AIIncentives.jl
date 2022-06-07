@@ -3,13 +3,15 @@ using NLsolve
 
 include("./Problem.jl")
 
+const EPSILON = 1e-8
+
 struct IterOptions
     tol::Number
     max_iters::Integer
     solver_tol::Number
     solver_max_iters::Integer
-    trust_delta_init::Number
-    trust_delta_max::Number
+    # trust_delta_init::Number
+    # trust_delta_max::Number
     init_guess::Number
     n_init_points::Integer
     init_mu::Number
@@ -19,16 +21,16 @@ end
 
 IterOptions(
     ;
-    tol::Number = 1e-6, max_iters::Integer = 1000,
+    tol::Number = 1e-6, max_iters::Integer = 100,
     solver_tol::Number = 1e-8, solver_max_iters::Integer = 500,
-    trust_delta_init::Number = 0.01, trust_delta_max::Number = 0.1,
+    # trust_delta_init::Number = 0.01, trust_delta_max::Number = 0.1,
     init_guess::Number = 1., n_init_points::Integer = 20,
     init_mu::Number = 0., init_sigma::Number = 1.,
     verbose::Bool = false
 ) = IterOptions(
     tol, max_iters,
     solver_tol, solver_max_iters,
-    trust_delta_init, trust_delta_max,
+    # trust_delta_init, trust_delta_max,
     init_guess, n_init_points,
     init_mu, init_sigma,
     verbose
