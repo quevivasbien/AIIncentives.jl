@@ -5,7 +5,7 @@ include("./Problem.jl")
 
 const EPSILON = 1e-8
 
-struct IterOptions
+struct SolverOptions
     tol::Number
     max_iters::Integer
     solver_tol::Number
@@ -19,7 +19,7 @@ struct IterOptions
     verbose::Bool
 end
 
-IterOptions(
+SolverOptions(
     ;
     tol::Number = 1e-6, max_iters::Integer = 100,
     solver_tol::Number = 1e-8, solver_max_iters::Integer = 500,
@@ -27,7 +27,7 @@ IterOptions(
     init_guess::Number = 1., n_init_points::Integer = 20,
     init_mu::Number = 0., init_sigma::Number = 1.,
     verbose::Bool = false
-) = IterOptions(
+) = SolverOptions(
     tol, max_iters,
     solver_tol, solver_max_iters,
     # trust_delta_init, trust_delta_max,
@@ -36,7 +36,7 @@ IterOptions(
     verbose
 )
 
-const DEFAULT_OPTIONS = IterOptions()
+const DEFAULT_OPTIONS = SolverOptions()
 
 # ITERATING METHOD `solve_iters`
 
@@ -56,7 +56,8 @@ function single_iter_for_i(
         obj_, jac_!,
         log.(init_guess),
         # NewtonTrustRegion(initial_delta = options.trust_delta_init, delta_hat = options.trust_delta_max),
-        LBFGS(),
+        # LBFGS(),
+        SimulatedAnnealing(),
         Optim.Options(
             x_tol = options.solver_tol,
             iterations = options.solver_max_iters
@@ -154,9 +155,9 @@ end
 
 function solve_roots(
     problem::Problem;
+    options = DEFAULT_OPTIONS,
     init_guesses::Vector{Float64} = [10.0^(3*i) for i in -2:2],
-    resolve_multiple = true,
-    ftol = 1e-8
+    resolve_multiple = true
 )
     jac! = get_jac(problem, inplace = true)
     function obj!(val, x)
@@ -174,7 +175,7 @@ function solve_roots(
         res = nlsolve(
             obj!,
             log.(init_guess),
-            ftol = ftol,
+            ftol = options.solver_tol,
             method = :trust_region  # this is just the default
         )
         if res.f_converged
@@ -206,7 +207,7 @@ function solve_hybrid(
     if options.verbose
         println("Finding roots...")
     end
-    roots_sol = solve_roots(problem, init_guesses = init_guesses, ftol = options.solver_tol, resolve_multiple = false)
+    roots_sol = solve_roots(problem, options = options, init_guesses = init_guesses, resolve_multiple = false)
     if !roots_sol.success
         return roots_sol
     end
@@ -252,7 +253,7 @@ function single_mixed_iter_for_i(problem, history, i, init_guess, options = DEFA
         obj_, jac_!,
         log.(init_guess),
         # NewtonTrustRegion(initial_delta = options.trust_delta_init, delta_hat = options.trust_delta_max),
-        LBFGS(),
+        SimulatedAnnealing(),
         Optim.Options(
             x_tol = options.solver_tol,
             iterations = options.solver_max_iters

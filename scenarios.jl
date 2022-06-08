@@ -372,7 +372,7 @@ function plot_payoffs_with_xp(
     Xs = if logscale
         exp.(range(log(min_Xs), stop = log(max_Xs), length = n_Xs))
     else
-        range(min_Xp, stop = max_Xp, length = n_Xp)
+        range(min_Xs, stop = max_Xs, length = n_Xs)
     end
     function f(xs)
         Xs_ = copy(vec(base_Xs))
@@ -419,7 +419,7 @@ function get_result(problem, method, options)
     if method == :hybrid
         return solve_hybrid(problem, options = options)
     elseif method == :roots
-        return solve_roots(problem, ftol = options.solver_tol)
+        return solve_roots(problem, options = options)
     elseif method == :scatter
         return solve_scatter(problem; options)
     elseif method == :mixed
@@ -617,6 +617,6 @@ function test(method = :hybrid)
 
     scenario = Scenario(2, A, α, B, β, θ, d, r, secondary_varying_param = :θ)
 
-    @time res = solve(scenario, method = method, options = IterOptions(verbose = true))
+    @time res = solve(scenario, method = method, options = SolverOptions(verbose = true))
     plot_result(res)
 end
