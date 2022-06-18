@@ -8,10 +8,8 @@ const EPSILON = 1e-8
 struct SolverOptions
     tol::Number
     max_iters::Integer
-    solver_tol::Number
-    solver_max_iters::Integer
-    # trust_delta_init::Number
-    # trust_delta_max::Number
+    iter_algo::Optim.AbstractOptimizer
+    iter_options::Optim.Options
     init_guess::Number
     n_init_points::Integer
     init_mu::Number
@@ -19,18 +17,19 @@ struct SolverOptions
     verbose::Bool
 end
 
+# get_T(x) = (t) -> 1 / log(x*t)
+
 SolverOptions(
     ;
     tol::Number = 1e-6, max_iters::Integer = 100,
-    solver_tol::Number = 1e-8, solver_max_iters::Integer = 500,
-    # trust_delta_init::Number = 0.01, trust_delta_max::Number = 0.1,
+    iter_algo::Optim.AbstractOptimizer = LBFGS(),
+    iter_options::Optim.Options = Optim.Options(x_tol = 1e-8, iterations = 500),
     init_guess::Number = 1., n_init_points::Integer = 20,
     init_mu::Number = 0., init_sigma::Number = 1.,
     verbose::Bool = false
 ) = SolverOptions(
     tol, max_iters,
-    solver_tol, solver_max_iters,
-    # trust_delta_init, trust_delta_max,
+    iter_algo, iter_options,
     init_guess, n_init_points,
     init_mu, init_sigma,
     verbose
@@ -46,35 +45,22 @@ function single_iter_for_i(
 )
     obj = get_func(problem, i, strat)
     obj_(x) = obj(exp.(x))
-    jac! = get_jac(problem, i, strat, inplace = true)
-    jac_!(var, x) = jac!(var, exp.(x))
+    # TODO: the gradients I was calculating were wrong!! Fix this or just leave them off I suppose
+    # jac = get_jac(problem, i, strat, inplace = false)
+    # jac_!(var, x) = copy!(var, exp.(x) .* jac(exp.(x)))
     # if init_guess is zero-effort, try breaking out
     if all(init_guess .== 0.)
         init_guess = exp.(options.init_mu .+ options.init_sigma .* randn(2))
     end
     res = optimize(
-        obj_, jac_!,
+        obj_,
+        # jac_!,
         log.(init_guess),
-        # NewtonTrustRegion(initial_delta = options.trust_delta_init, delta_hat = options.trust_delta_max),
-        # LBFGS(),
-        SimulatedAnnealing(),
-        Optim.Options(
-            x_tol = options.solver_tol,
-            iterations = options.solver_max_iters
-        )
+        options.iter_algo,
+        options.iter_options
     )
     # check the zero-input payoff
-    zero_payoff = if any(problem.prodFunc.θ .> 0.)
-        x = copy(strat)
-        x[i, :] = [0., 0.]
-        (_, p) = f(problem.prodFunc, x[:, 1], x[:, 2])
-        # safety in this case is ∞
-        reward(problem.csf, i, p)
-    else
-        # safety is 0
-        -problem.d[i]
-    end
-    if zero_payoff > -Optim.minimum(res)
+    if obj([0., 0.]) > -Optim.minimum(res)
         return [0., 0.]
     else
         return exp.(Optim.minimizer(res))
@@ -243,24 +229,21 @@ end
 function single_mixed_iter_for_i(problem, history, i, init_guess, options = DEFAULT_OPTIONS)
     objs = [get_func(problem, i, history[:, :, j]) for j in size(history, 3)]
     obj_(x) = sum(obj(exp.(x)) for obj in objs)
-    jacs = [get_jac(problem, i, history[:, :, j], inplace = false) for j in size(history, 3)]
-    jac_!(var, x) = copy!(var, sum(jac(exp.(x)) for jac in jacs))
+    # jacs = [get_jac(problem, i, history[:, :, j], inplace = false) for j in size(history, 3)]
+    # jac_!(var, x) = copy!(var, sum(jac(exp.(x)) for jac in jacs))
     # if init_guess is zero-effort, try breaking out
     if all(init_guess .== 0.)
         init_guess = exp.(options.init_mu .+ options.init_sigma .* randn(2))
     end
     res = optimize(
-        obj_, jac_!,
+        obj_,
+        # jac_!,
         log.(init_guess),
-        # NewtonTrustRegion(initial_delta = options.trust_delta_init, delta_hat = options.trust_delta_max),
-        SimulatedAnnealing(),
-        Optim.Options(
-            x_tol = options.solver_tol,
-            iterations = options.solver_max_iters
-        )
+        options.iter_algo,
+        options.iter_options
     )
     # check the zero-input payoff
-    zero_payoff = obj_([0., 0.])
+    zero_payoff = sum(obj([0., 0.]) for obj in objs)
     if zero_payoff > -Optim.minimum(res)
         return [0., 0.]
     else

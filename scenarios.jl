@@ -104,16 +104,7 @@ end
 # functions for plotting with single varying param, scatterplot instead of line plot (for when multiple solutions are found)
 
 function get_values_for_scatterplot(results::Vector{SolverResult}, xaxis; take_avg = false)
-    if !take_avg
-        xaxis_ = vcat((fill(x, size(r.Xs, 1)) for (x, r) in zip(xaxis, results))...)
-        Xs = vcat((r.Xs for r in results)...)
-        Xp = vcat((r.Xp for r in results)...)
-        s = vcat((r.s for r in results)...)
-        p = vcat((r.p for r in results)...)
-        payoffs = vcat((r.payoffs for r in results)...)
-        total_safety = get_total_safety(s)
-        return xaxis_, Xs, Xp, s, p, total_safety, payoffs
-    else
+    if take_avg
         Xs = vcat((mean(r.Xs, dims = 1) for r in results)...)
         Xp = vcat((mean(r.Xp, dims = 1) for r in results)...)
         s = vcat((mean(r.s, dims = 1) for r in results)...)
@@ -121,6 +112,15 @@ function get_values_for_scatterplot(results::Vector{SolverResult}, xaxis; take_a
         payoffs = vcat((mean(r.payoffs, dims = 1) for r in results)...)
         total_safety = vcat((mean(get_total_safety(r.s), dims = 1) for r in results)...)
         return xaxis, Xs, Xp, s, p, total_safety, payoffs
+    else
+        xaxis_ = vcat((fill(x, size(r.Xs, 1)) for (x, r) in zip(xaxis, results))...)
+        Xs = vcat((r.Xs for r in results)...)
+        Xp = vcat((r.Xp for r in results)...)
+        s = vcat((r.s for r in results)...)
+        p = vcat((r.p for r in results)...)
+        payoffs = vcat((r.payoffs for r in results)...)
+        total_safety = get_total_safety(s)
+        return xaxis_, Xs, Xp, s, p, total_safety, payoffs        
     end
 end
 
