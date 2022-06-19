@@ -3,7 +3,7 @@ using NLsolve
 
 include("./Problem.jl")
 
-const EPSILON = 1e-8
+const EPSILON = 1e-8  # small number to help numerical stability in some places
 
 struct SolverOptions
     tol::Number
@@ -16,8 +16,6 @@ struct SolverOptions
     init_sigma::Number
     verbose::Bool
 end
-
-# get_T(x) = (t) -> 1 / log(x*t)
 
 SolverOptions(
     ;
@@ -80,7 +78,7 @@ end
     
 function solve_iters(
     problem::Problem,
-    init_guess::Array;
+    init_guess::Array,
     options = DEFAULT_OPTIONS
 )
     strat = init_guess
@@ -97,11 +95,12 @@ function solve_iters(
     if options.verbose
         println("Reached max iterations")
     end
+    # TODO: implement optional checking
     return SolverResult(problem, false, strat[:, 1], strat[:, 2])
 end
 
 function solve_iters(
-    problem::Problem;
+    problem::Problem,
     options = DEFAULT_OPTIONS
 )
     return solve_iters(problem, fill(options.init_guess, (problem.n, 2)); options)
@@ -112,7 +111,7 @@ end
 # Runs iter_solve from multiple init points and compares results
 
 function solve_scatter(
-    problem::Problem;
+    problem::Problem,
     options = DEFAULT_OPTIONS
 )
     # draw init points from log-normal distribution
@@ -140,8 +139,8 @@ end
 # ROOT-FINDING METHOD `solve_roots`
 
 function solve_roots(
-    problem::Problem;
-    options = DEFAULT_OPTIONS,
+    problem::Problem,
+    options = DEFAULT_OPTIONS;
     init_guesses::Vector{Float64} = [10.0^(3*i) for i in -2:2],
     resolve_multiple = true
 )
@@ -186,14 +185,14 @@ end
 # HYBRID METHOD (Runs root-finding method, then iterating method)
 
 function solve_hybrid(
-    problem::Problem;
-    init_guesses::Vector{Float64} = [10.0^(3*i) for i in -2:2],
-    options = DEFAULT_OPTIONS
+    problem::Problem,
+    options = DEFAULT_OPTIONS;
+    init_guesses::Vector{Float64} = [10.0^(3*i) for i in -2:2]
 )
     if options.verbose
         println("Finding roots...")
     end
-    roots_sol = solve_roots(problem, options = options, init_guesses = init_guesses, resolve_multiple = false)
+    roots_sol = solve_roots(problem, options, init_guesses = init_guesses, resolve_multiple = false)
     if !roots_sol.success
         return roots_sol
     end
@@ -210,12 +209,12 @@ function solve_hybrid(
     end
     Threads.@threads for i in 1:n_tries
         strats_ = copy(selectdim(strats, 1, i))
-        iter_sol = solve_iters(problem, strats_; options)
+        iter_sol = solve_iters(problem, strats_, options)
         if iter_sol.success
             push!(results, iter_sol)
         end
     end
-    if length(results) == 0
+    if length(results) == 0,
         return get_null_result(problem.n)
     end
     combined_sols = sum([make_3d(r, problem.n) for r in results])
@@ -260,7 +259,7 @@ function single_mixed_iter(problem, history, init_guess, options = DEFAULT_OPTIO
 end
 
 function solve_mixed(
-    problem::Problem;
+    problem::Problem,
     options = DEFAULT_OPTIONS
 )
     # draw init points from log-normal distribution
@@ -292,7 +291,7 @@ function solve_mixed(
 end
 
     
-function test()
+function test_solve()
     println("Running test on `solve.jl`...")
     prodFunc = ProdFunc([10., 10.], [0.5, 0.5], [10., 10.], [0.5, 0.5], [0., 0.])
     csf = CSF(1., 0., 0., 0.)

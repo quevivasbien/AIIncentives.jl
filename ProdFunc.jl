@@ -9,6 +9,15 @@ end
 
 ProdFunc(A, α, B, β, θ) = ProdFunc(length(A), A, α, B, β, θ)
 
+ProdFunc(
+    ;
+    A = [10., 10.],
+    α = [0.5, 0.5],
+    B = [10., 10.],
+    β = [0.5, 0.5], 
+    θ = [0.5, 0.5]
+) = ProdFunc(2, A, α, B, β, θ)
+
 function f(prodFunc::ProdFunc, i::Integer, Xs::Number, Xp::Number)
     p = prodFunc.B[i] * Xp^prodFunc.β[i]
     s = prodFunc.A[i] * Xs^prodFunc.α[i] * p^(-prodFunc.θ[i])
@@ -57,6 +66,8 @@ struct CSF
     a_w::Number
     a_l::Number
 end
+
+CSF(; w = 1., l = 0., a_w = 0., a_l = 0.) = CSF(w, l, a_w, a_l)
 
 function reward(csf::CSF, i::Integer, p::Vector)
     sum_ = sum(p)

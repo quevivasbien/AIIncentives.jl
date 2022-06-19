@@ -23,7 +23,21 @@ Scenario(
     w = 1., l = 0., a_w = 0., a_l = 0.,
     varying_param = :r,
     secondary_varying_param = nothing
-) = Scenario(n_players, A, α, B, β, θ, d, r, CSF(w, l, a_w, a_l), varying_param, secondary_varying_param)
+) = begin
+    # expand varying params if necessary
+    if ndims(eval(varying_param)) == 1
+        eval(:($varying_param = repeat($varying_param, 1, n_players)))
+    end
+    if ndims(eval(secondary_varying_param)) == 1
+        eval(:($secondary_varying_param = repeat($secondary_varying_param, 1, n_players)))
+    end
+    Scenario(
+        n_players,
+        A, α, B, β, θ,
+        d, r, CSF(w, l, a_w, a_l),
+        varying_param, secondary_varying_param
+    )
+end
 
 
 struct ScenarioResult
@@ -43,7 +57,7 @@ end
 # Helper functions
 
 function linspace(start, stop, steps, reps = 1)
-    return transpose(repeat(range(start, stop=stop, length=steps), outer = (1, reps)))
+    return repeat(range(start, stop=stop, length=steps), 1, reps)
 end
 
 function mean(x; dims)
@@ -416,18 +430,18 @@ end
 # SOLVER FUNCTIONS:
 
 function get_result(problem, method, options)
-    if method == :hybrid
-        return solve_hybrid(problem, options = options)
+    solve_func = if method == :hybrid
+        solve_hybrid
     elseif method == :roots
-        return solve_roots(problem, options = options)
+        solve_roots
     elseif method == :scatter
-        return solve_scatter(problem; options)
+        solve_scatter
     elseif method == :mixed
-        return solve_mixed(problem; options)
+        solve_mixed
     else
-        # implicitly method == :iters by default
-        return solve_iters(problem; options)
+        solve_iters
     end
+    return solve_func(problem, options)
 end
 
 
@@ -440,10 +454,9 @@ function solve_with_secondary_variation(
         println("Secondary variation is unsupported with the mixed or scatter solvers.")
         return ScenarioResult(SolverResult[], plot())
     end
-    varying_param_ = getfield(scenario, scenario.varying_param)
-    varying_param = size(varying_param_, 1) == 1 ? repeat(varying_param_, scenario.n_players) : varying_param_
+    varying_param = tranpose(getfield(scenario, scenario.varying_param))
     n_steps = size(varying_param, 2)
-    secondary_varying_param = getfield(scenario, scenario.secondary_varying_param)
+    secondary_varying_param = transpose(getfield(scenario, scenario.secondary_varying_param))
     n_steps_secondary = size(secondary_varying_param, 2)
     # create stacks of variables to send to solver
     # everything needs to have shape n_players x n_steps x n_steps_secondary
@@ -502,8 +515,7 @@ function solve(
         )
     end
 
-    varying_param_ = getfield(scenario, scenario.varying_param)
-    varying_param = size(varying_param_, 1) == 1 ? repeat(varying_param_, scenario.n_players) : varying_param_
+    varying_param = transpose(getfield(scenario, scenario.varying_param))
     n_steps = size(varying_param, 2)
     
     A = similar(scenario.A, (scenario.n_players, n_steps))
@@ -553,11 +565,9 @@ function plot_result(
     take_avg = false
 )
     varying_param = getfield(res.scenario, res.scenario.varying_param)
-    n_steps = size(varying_param, 2)
-    xaxis = if size(varying_param, 1) == 1
-        reshape(varying_param, :, 1)
-    elseif varying_param[1, :] == varying_param[2, :]
-        varying_param[1, :]
+    n_steps = size(varying_param, 1)
+    xaxis = if varying_param[:, 2] == varying_param[:, 1]
+        varying_param[:, 1]
     else
         1:n_steps
     end
@@ -587,8 +597,8 @@ function plot_result(
         end
     else
         secondary_varying_param = getfield(res.scenario, res.scenario.secondary_varying_param)
-        n_steps_secondary = size(secondary_varying_param, 2)
-        labels = ["$(res.scenario.secondary_varying_param) = $(secondary_varying_param[:, i])" for i in 1:n_steps_secondary]
+        n_steps_secondary = size(secondary_varying_param, 1)
+        labels = ["$(res.scenario.secondary_varying_param) = $(secondary_varying_param[i, :])" for i in 1:n_steps_secondary]
         create_plot(
             res.solverResults,
             xaxis,
@@ -604,16 +614,16 @@ function plot_result(
 end
 
 
-function test(method = :hybrid)
+function test_scenarios(method = :hybrid)
     println("Running test on `scenarios.jl`...")
 
     A = [10., 10.]
     α = [0.5, 0.75]
     B = [10., 10.]
     β = [0.5, 0.5]
-    θ = transpose([0. 0.; 0.5 0.5])
+    θ = [0. 0.; 0.5 0.5]
     d = [1., 1.]
-    r = linspace(0.01, 0.1, Threads.nthreads(), 2)
+    r = range(0.01, 0.1, length = Threads.nthreads())
 
     scenario = Scenario(2, A, α, B, β, θ, d, r, secondary_varying_param = :θ)
 

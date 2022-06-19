@@ -26,6 +26,14 @@ end
 
 Problem(d, r, prodFunc, csf) = Problem(length(d), d, r, prodFunc, csf)
 
+Problem(
+    ;
+    d = [0., 0.],
+    r = [0.1, 0.1],
+    prodFunc = ProdFunc(),
+    csf = CSF()
+) = Problem(2, d, r, prodFunc, csf)
+
 function payoff(problem::Problem, i::Integer, Xs::Vector, Xp::Vector)
     (s, p) = f(problem.prodFunc, Xs, Xp)
     σ = get_total_safety(s)
