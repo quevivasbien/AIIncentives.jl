@@ -2,7 +2,7 @@ using Plots, Plots.PlotMeasures
 include("./solve.jl")
 
 
-struct Scenario
+mutable struct Scenario
     n_players::Integer
     A::Array
     α::Array
@@ -16,27 +16,36 @@ struct Scenario
     secondary_varying_param
 end
 
-Scenario(
+function Scenario(
     n_players,
     A, α, B, β, θ,
     d, r;
     w = 1., l = 0., a_w = 0., a_l = 0.,
     varying_param = :r,
     secondary_varying_param = nothing
-) = begin
-    # expand varying params if necessary
-    if ndims(eval(varying_param)) == 1
-        eval(:($varying_param = repeat($varying_param, 1, n_players)))
-    end
-    if ndims(eval(secondary_varying_param)) == 1
-        eval(:($secondary_varying_param = repeat($secondary_varying_param, 1, n_players)))
-    end
-    Scenario(
+)
+    scenario = Scenario(
         n_players,
         A, α, B, β, θ,
         d, r, CSF(w, l, a_w, a_l),
         varying_param, secondary_varying_param
     )
+    # expand varying params if necessary
+    vparam = getfield(scenario, varying_param)
+    if ndims(vparam) == 1
+        setfield!(
+            scenario, varying_param,
+            repeat(vparam, 1, n_players)
+        )
+    end
+    vparam2 = getfield(scenario, secondary_varying_param)
+    if ndims(vparam2) == 1
+        setfield!(
+            scenario, secondary_varying_param,
+            repeat(vparam2, 1, n_players)
+        )
+    end
+    return scenario
 end
 
 
@@ -333,7 +342,7 @@ end
 function create_plot(results::Array{SolverResult, 2}, xaxis, xlabel, plotsize, labels, title, logscale)
     (Xs, Xp, s, p, total_safety, payoffs) = get_values_for_plot(results)
     players_same = are_players_same(results)
-    (perf_plt, safety_plt, total_safety_plt, payoff_plt) = if players_same
+    (Xp_plt, Xs_plt, perf_plt, safety_plt, total_safety_plt, payoff_plt) = if players_same
         _plot_helper_same(xaxis, Xs, Xp, s, p, total_safety, payoffs, xlabel, labels)
     else
         _plot_helper_het(xaxis, Xs, Xp, s, p, total_safety, payoffs, xlabel, labels)
@@ -345,7 +354,7 @@ function create_plot(results::Array{SolverResult, 2}, xaxis, xlabel, plotsize, l
         yaxis!(safety_plt, :log10)
     end
     final_plot = plot(
-        perf_plt, safety_plt, total_safety_plt, payoff_plt,
+        Xp_plt, Xs_plt, perf_plt, safety_plt, total_safety_plt, payoff_plt,
         layout = (3, 2), size = plotsize, legend_font_pointsize = 6,
         legend_background_color = RGBA(1., 1., 1., 0.5),
         left_margin = 20px
@@ -454,7 +463,7 @@ function solve_with_secondary_variation(
         println("Secondary variation is unsupported with the mixed or scatter solvers.")
         return ScenarioResult(SolverResult[], plot())
     end
-    varying_param = tranpose(getfield(scenario, scenario.varying_param))
+    varying_param = transpose(getfield(scenario, scenario.varying_param))
     n_steps = size(varying_param, 2)
     secondary_varying_param = transpose(getfield(scenario, scenario.secondary_varying_param))
     n_steps_secondary = size(secondary_varying_param, 2)

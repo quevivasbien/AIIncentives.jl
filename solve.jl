@@ -103,7 +103,7 @@ function solve_iters(
     problem::Problem,
     options = DEFAULT_OPTIONS
 )
-    return solve_iters(problem, fill(options.init_guess, (problem.n, 2)); options)
+    return solve_iters(problem, fill(options.init_guess, (problem.n, 2)), options)
 end
 
 
@@ -141,6 +141,7 @@ end
 function solve_roots(
     problem::Problem,
     options = DEFAULT_OPTIONS;
+    f_tol = 1e-8,
     init_guesses::Vector{Float64} = [10.0^(3*i) for i in -2:2],
     resolve_multiple = true
 )
@@ -160,7 +161,7 @@ function solve_roots(
         res = nlsolve(
             obj!,
             log.(init_guess),
-            ftol = options.solver_tol,
+            ftol = f_tol,
             method = :trust_region  # this is just the default
         )
         if res.f_converged
@@ -214,7 +215,7 @@ function solve_hybrid(
             push!(results, iter_sol)
         end
     end
-    if length(results) == 0,
+    if length(results) == 0
         return get_null_result(problem.n)
     end
     combined_sols = sum([make_3d(r, problem.n) for r in results])
