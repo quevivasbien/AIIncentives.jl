@@ -15,6 +15,7 @@ struct SolverOptions
     init_mu::Number
     init_sigma::Number
     verbose::Bool
+    verify::Integer
 end
 
 SolverOptions(
@@ -24,13 +25,13 @@ SolverOptions(
     iter_options::Optim.Options = Optim.Options(x_tol = 1e-8, iterations = 500),
     init_guess::Number = 1., n_init_points::Integer = 20,
     init_mu::Number = 0., init_sigma::Number = 1.,
-    verbose::Bool = false
+    verbose::Bool = false, verify::Integer = 4
 ) = SolverOptions(
     tol, max_iters,
     iter_algo, iter_options,
     init_guess, n_init_points,
     init_mu, init_sigma,
-    verbose
+    verbose, verify
 )
 
 const DEFAULT_OPTIONS = SolverOptions()
@@ -75,6 +76,33 @@ function solve_iters_single(
     end
     return new_strats
 end
+
+function verify(problem, strat, options)
+    # Checks some points around the given strat
+    # returns true if strat satisfies optimality (in nash eq. sense) at those points
+    # won't always catch wrong solutions, but does a decent job
+    Xs = strat[:, 1]
+    Xp = strat[:, 2]
+    payoffs = all_payoffs(problem, Xs, Xp)
+    for i in 1:problem.n, j in 1:options.verify
+        higher_Xs = Xs; higher_Xs[i] *= exp(10*j*options.tol)
+        higher_Xp = Xp; higher_Xp[i] *= exp(10*j*options.tol)
+        lower_Xs = Xs; lower_Xs[i] *= exp(-10*j*options.tol)
+        lower_Xp = Xp; lower_Xp[i] *= exp(-10*j*options.tol)
+        if (
+            payoff(problem, i, higher_Xs, Xp) > payoffs[i]
+            || payoff(problem, i, Xs, higher_Xp) > payoffs[i]
+            || payoff(problem, i, lower_Xs, Xp) > payoffs[i]
+            || payoff(problem, i, Xs, lower_Xp) > payoffs[i]
+        )
+            if options.verbose
+                println("Solution failed verification!")
+            end
+            return false
+        end
+    end
+    return true
+end
     
 function solve_iters(
     problem::Problem,
@@ -88,14 +116,19 @@ function solve_iters(
             if options.verbose
                 println("Exited on iteration $t")
             end
-            return SolverResult(problem, true, new_strat[:, 1], new_strat[:, 2], prune = false)
+            success = options.verify == 0 || verify(problem, new_strat, options)
+            return SolverResult(
+                problem,
+                success,
+                new_strat[:, 1], new_strat[:, 2],
+                prune = false
+            )
         end
         strat = new_strat
     end
     if options.verbose
         println("Reached max iterations")
     end
-    # TODO: implement optional checking
     return SolverResult(problem, false, strat[:, 1], strat[:, 2])
 end
 
@@ -164,9 +197,10 @@ function solve_roots(
             ftol = f_tol,
             method = :trust_region  # this is just the default
         )
-        if res.f_converged
+        solution = reshape(exp.(res.zero), (problem.n, 2))
+        if res.f_converged && (options.verify == 0 || verify(problem, solution, options))
             successes[i] = true
-            results[i, :, :] = reshape(exp.(res.zero), (problem.n, 2))
+            results[i, :, :] = solution
         end
     end
     if !any(successes)
@@ -294,20 +328,21 @@ end
     
 function test_solve()
     println("Running test on `solve.jl`...")
-    prodFunc = ProdFunc([10., 10.], [0.5, 0.5], [10., 10.], [0.5, 0.5], [0., 0.])
+    prodFunc = ProdFunc([10., 10.], [0.5, 0.5], [10., 10.], [0.5, 0.5], [0.25, 0.25])
     csf = CSF(1., 0., 0., 0.)
     problem = Problem([1., 1.], [0.01, 0.01], prodFunc, csf)
-    @time solve_iters_sol = solve_iters(problem)
-    @time solve_grid_sol = solve_grid(problem)
-    @time solve_roots_sol = solve_roots(problem)
-    @time solve_hybrid_sol = solve_hybrid(problem)
+    options = SolverOptions(verbose = true)
     println("With `solve_iters`:")
+    @time solve_iters_sol = solve_iters(problem, options)
     print(solve_iters_sol)
-    println("With `solve_grid`:")
-    print(solve_grid_sol)
     println("With `solve_roots`:")
+    @time solve_roots_sol = solve_roots(problem, options)
     print(solve_roots_sol)
     println("With `solve_hybrid`:")
+    @time solve_hybrid_sol = solve_hybrid(problem, options)
     print(solve_roots_sol)
+    println("With `solve_mixed`:")
+    @time solve_mixed_sol = solve_mixed(problem, options)
+    print(solve_mixed_sol)
     return
 end

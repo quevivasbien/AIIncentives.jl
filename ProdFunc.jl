@@ -24,11 +24,16 @@ function f(prodFunc::ProdFunc, i::Integer, Xs::Number, Xp::Number)
     return s, p
 end
 
-function f(prodFunc::ProdFunc, Xs, Xp)
+# allow direct calling of prodFunc
+(prodFunc::ProdFunc)(i::Integer, Xs::Number, Xp::Number) = f(prodFunc, i, Xs, Xp)
+
+function f(prodFunc::ProdFunc, Xs::Vector, Xp::Vector)
     p = prodFunc.B .* Xp.^prodFunc.β
     s = prodFunc.A .* Xs.^prodFunc.α .* p.^(-prodFunc.θ)
     return s, p
 end
+
+(prodFunc::ProdFunc)(Xs::Vector, Xp::Vector) = f(prodFunc, Xs, Xp)
 
 function df_from_s_p(prodFunc::ProdFunc, i::Integer, s::Number, p::Number)
     s_mult = prodFunc.A[i] * prodFunc.α[i] * (s / prodFunc.A[i])^(1. - 1. / prodFunc.α[i])
@@ -81,6 +86,8 @@ function reward(csf::CSF, i::Integer, p::Vector)
     )
 end
 
+(csf::CSF)(i::Integer, p::Vector) = reward(csf, i, p)
+
 function all_rewards(csf::CSF, p::Vector)
     sum_ = sum(p)
     if sum_ == 0.
@@ -92,6 +99,8 @@ function all_rewards(csf::CSF, p::Vector)
         .+ (csf.l .+ p .* csf.a_l) .* (1. .- win_probas)
     )
 end
+
+(csf::CSF)(p::Vector) = all_rewards(csf, p)
 
 function reward_deriv(csf::CSF, i::Integer, p::Vector)
     sum_ = sum(p)

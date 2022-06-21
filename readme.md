@@ -38,10 +38,10 @@ You can then create and solve a scenario like
 scenario = Scenario(
     2,  # n_players
     [10., 10.],  # A
-    [0.5, 0.5],  # alpha
+    [0.5, 0.5],  # α
     [10., 10.],  # B
-    [0.5, 0.5],  # beta
-    [0.25, 0.25],  # theta
+    [0.5, 0.5],  # β
+    [0.25, 0.25],  # θ
     [1., 1.],  # d
     linspace(0.01, 0.1, 20),  # r
     varying_param = :r
@@ -73,25 +73,43 @@ describing how the inputs *X<sub>s</sub>* and *X<sub>p</sub>* produce safety and
 prodFunc = ProdFunc(
     2,  # n_players
     [10., 10.],  # A
-    [0.5, 0.5],  # alpha
+    [0.5, 0.5],  # α
     [10., 10.],  # B
-    [0.5, 0.5],  # beta
-    [0.25, 0.25]  # theta
+    [0.5, 0.5],  # β
+    [0.25, 0.25]  # θ
 )
 ```
-You don't need to include the `n_players` parameter, but either way the other parameters need to all be vectors of equal length (equal to `n_players`).
+You don't need to include the `n_players` parameter, but either way the other parameters need to all be vectors of equal length (equal to `n_players`). You can also provide all parameters as keyword arguments, in which case any excluded parameters will be set to default values; e.g., the following is equivalent to the above:
+```julia
+prodFunc = ProdFunc(
+    A = [10., 10.],
+    α = [0.5, 0.5],
+    B = [10., 10.],
+    β = [0.5, 0.5],
+    θ = [0.25, 0.25]
+)
+```
+(Side note: to use math-related characters in most Julia code, you can typically just type the Latex code then press Tab. For example, `\alpha` + `[Tab]` becomes `α`.)
 
 To determine the outputs for all players, you can do
 ```julia
 (s, p) = f(prodFunc, Xs, Xp)
 ```
+or, equivalently,
+```julia
+(s, p) = prodFunc(Xs, Xp)
+```
 where `Xs` and `Xp` are vectors of length equal to `prodFunc.n_players`. Here `s` and `p` will be vectors representing the safety and performance of each player. To get the safety and performance of a single player with index `i`, just do
 ```julia
 (s, p) = f(prodFunc, i, xs, xp)
 ```
+or, equivalently,
+```julia
+(s, p) = prodFunc(i, xs, xp)
+```
 where `xs` and `xp` are both scalar values; the outputs `s` and `p` will also be scalar.
 
-You can also compute the derivative of `f` as `df`.
+You can also compute the Jacobian of `f` as `df`.
 
 ### The `CSF` type
 
@@ -106,6 +124,10 @@ csf = CSF(
 )
 ```
 
+You can also provide all parameters as keyword arguments, in which case any excluded parameters will be set to default values. That is, the following is equivalent to the above:
+```julia
+csf = CSF(w = 1., l = 0., a_w = 0., a_l = 0.)
+```
 
 The parameters correspond to the following definition of *ρ*:
 
@@ -119,9 +141,17 @@ To get the rewards for all players given a vector of performance `p`, you can do
 ```julia
 rewards = all_rewards(csf, p)
 ```
-and to get the reward for just a single player, indexed by `i`:
+or just
+```julia
+rewards = csf(p)
+```
+and to get the reward for just a single player, indexed by `i`,
 ```julia
 reward_for_player_i = reward(csf, i, p)
+```
+or just
+```julia
+reward_for_player_i = csf(i, p)
 ```
 
 You can also get derivatives with `all_reward_derivs` and `reward_deriv`.
@@ -165,7 +195,7 @@ The `solve.jl` file contains several methods for finding Nash equilibria for a g
 ```julia
 solve_iters(problem)
 ```
-where `problem` is a `Problem`, which will return a `SolverResult` object (basically just a container for the equilibrium values of safety, performance, and payoffs).
+where `problem` is a `Problem`, which will return a `SolverResult` object (basically just a container for the equilibrium values of safety, performance, and payoffs; the `SolverResult` also has a `success` field which indicates exactly what it says -- true iff the solver was successful).
 
 You can also supply a `SolverOptions` object as a second argument, to modify some details of how the solver works. For example:
 ```julia
@@ -202,10 +232,10 @@ The main type defined here is `Scenario`. You can create a scenario like
 scenario = Scenario(
     2,  # n_players
     [10., 10.],  # A
-    [0.5, 0.5],  # alpha
+    [0.5, 0.5],  # α
     [10., 10.],  # B
-    [0.5, 0.5],  # beta
-    [0.25, 0.25],  # theta
+    [0.5, 0.5],  # β
+    [0.25, 0.25],  # θ
     [1., 1.],  # d
     range(0.01, 0.1, length = 20),  # r
     varying_param = :r
@@ -218,10 +248,10 @@ If we want, we can include a second varying parameter, like so:
 scenario = Scenario(
     2,  # n_players
     [10., 10.],  # A
-    [0.5, 0.5],  # alpha
+    [0.5, 0.5],  # α
     [10., 10.],  # B
-    [0.5, 0.5],  # beta
-    range(0., 1., length = 4),  # theta
+    [0.5, 0.5],  # β
+    range(0., 1., length = 4),  # θ
     [1., 1.],  # d
     range(0.01, 0.1, length = 20),  # r
     varying_param = :r,
@@ -229,6 +259,8 @@ scenario = Scenario(
 )
 ```
 In this example, we look at the problem with every combination of the provided varying and secondary varying parameters. The only difference between the two is that when we plot the results, the varying parameter will vary along the x-axis, while the secondary varying parameter will vary in different series.
+
+To change the CSF used in a scenario, you can provide to the `Scenario` constructor keyword arguments for `w`, `l`, `a_w`, and `a_l`. (The defaults are 1 for `w` and 0 for the others.)
 
 To find the equilibrium solutions for a scenario, use the `solve` function:
 ```julia
@@ -265,3 +297,7 @@ plot_result(
     take_avg = true
 )
 ```
+
+## More about plotting
+
+To-do
