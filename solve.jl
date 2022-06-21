@@ -51,18 +51,25 @@ function single_iter_for_i(
     if all(init_guess .== 0.)
         init_guess = exp.(options.init_mu .+ options.init_sigma .* randn(2))
     end
-    res = optimize(
-        obj_,
-        # jac_!,
-        log.(init_guess),
-        options.iter_algo,
-        options.iter_options
-    )
-    # check the zero-input payoff
-    if obj([0., 0.]) > -Optim.minimum(res)
-        return [0., 0.]
-    else
-        return exp.(Optim.minimizer(res))
+    try
+        res = optimize(
+            obj_,
+            # jac_!,
+            log.(init_guess),
+            options.iter_algo,
+            options.iter_options
+        )
+        # check the zero-input payoff
+        if obj([0., 0.]) > -Optim.minimum(res)
+            return [0., 0.]
+        else
+            return exp.(Optim.minimizer(res))
+        end
+    catch e
+        if options.verbose
+            println("Warning: Encountered $e, returning NaN")
+        end
+        return [NaN, NaN]
     end
 end
 

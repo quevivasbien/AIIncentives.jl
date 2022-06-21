@@ -32,18 +32,20 @@ function Scenario(
     )
     # expand varying params if necessary
     vparam = getfield(scenario, varying_param)
-    if ndims(vparam) == 1
+    if size(vparam, 2) == 1
         setfield!(
             scenario, varying_param,
             repeat(vparam, 1, n_players)
         )
     end
-    vparam2 = getfield(scenario, secondary_varying_param)
-    if ndims(vparam2) == 1
-        setfield!(
-            scenario, secondary_varying_param,
-            repeat(vparam2, 1, n_players)
-        )
+    if !isnothing(secondary_varying_param)
+        vparam2 = getfield(scenario, secondary_varying_param)
+        if size(vparam2, 2) == 1
+            setfield!(
+                scenario, secondary_varying_param,
+                repeat(vparam2, 1, n_players)
+            )
+        end
     end
     return scenario
 end
