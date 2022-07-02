@@ -91,21 +91,32 @@ function verify(problem, strat, options)
     Xs = strat[:, 1]
     Xp = strat[:, 2]
     payoffs = all_payoffs(problem, Xs, Xp)
-    for i in 1:problem.n, j in 1:options.verify
-        higher_Xs = Xs; higher_Xs[i] *= exp(10*j*options.tol)
-        higher_Xp = Xp; higher_Xp[i] *= exp(10*j*options.tol)
-        lower_Xs = Xs; lower_Xs[i] *= exp(-10*j*options.tol)
-        lower_Xp = Xp; lower_Xp[i] *= exp(-10*j*options.tol)
-        if (
-            payoff(problem, i, higher_Xs, Xp) > payoffs[i]
-            || payoff(problem, i, Xs, higher_Xp) > payoffs[i]
-            || payoff(problem, i, lower_Xs, Xp) > payoffs[i]
-            || payoff(problem, i, Xs, lower_Xp) > payoffs[i]
-        )
-            if options.verbose
-                println("Solution failed verification!")
+    for i in 1:problem.n
+        higher_Xs = copy(Xs)
+        higher_Xp = copy(Xp)
+        lower_Xs = copy(Xs)
+        lower_Xp = copy(Xp)
+        for j in 1:options.verify
+            higher_Xs[i] *= exp(100*j*options.tol)
+            higher_Xp[i] *= exp(100*j*options.tol)
+            lower_Xs[i] *= exp(-100*j*options.tol)
+            lower_Xp[i] *= exp(-100*j*options.tol)
+            if (
+                payoff(problem, i, higher_Xs, Xp) > payoffs[i]
+                || payoff(problem, i, Xs, higher_Xp) > payoffs[i]
+                || payoff(problem, i, lower_Xs, Xp) > payoffs[i]
+                || payoff(problem, i, Xs, lower_Xp) > payoffs[i]
+            )
+                if options.verbose
+                    println("Solution failed verification!")
+                    # println(payoffs[i])
+                    # println(payoff(problem, i, higher_Xs, Xp))
+                    # println(payoff(problem, i, Xs, higher_Xp))
+                    # println(payoff(problem, i, lower_Xs, Xp))
+                    # println(payoff(problem, i, Xs, lower_Xp))
+                end
+                return false
             end
-            return false
         end
     end
     return true
