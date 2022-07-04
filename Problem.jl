@@ -264,6 +264,7 @@ function resolve_multiple_solutions(
 end
 
 function print(result::SolverResult)
+    println("success: ", result.success)
     println("Xs: ", result.Xs)
     println("Xp: ", result.Xp)
     println("s: ", result.s)

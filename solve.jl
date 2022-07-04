@@ -5,42 +5,25 @@ include("./Problem.jl")
 
 const EPSILON = 1e-8  # small number to help numerical stability in some places
 
-struct SolverOptions
-    tol::Number
-    max_iters::Integer
-    iter_algo::Optim.AbstractOptimizer
-    iter_options::Optim.Options
-    init_guess::Number
-    n_init_points::Integer
-    init_mu::Number
-    init_sigma::Number
-    verbose::Bool
-    verify::Integer
+Base.@kwdef struct SolverOptions
+    tol::Number = 1e-6
+    max_iters::Integer = 100
+    iter_algo::Optim.AbstractOptimizer = LBFGS()
+    iter_options::Optim.Options = Optim.Options(x_tol = 1e-8, iterations = 500)
+    init_guess::Number = 1.
+    n_init_points::Integer = 20
+    init_mu::Number = 0.
+    init_sigma::Number = 1.
+    verbose::Bool = false
+    verify::Integer = 1
+    verify_mult::Number = 1.1
 end
-
-SolverOptions(
-    ;
-    tol::Number = 1e-6, max_iters::Integer = 100,
-    iter_algo::Optim.AbstractOptimizer = LBFGS(),
-    iter_options::Optim.Options = Optim.Options(x_tol = 1e-8, iterations = 500),
-    init_guess::Number = 1., n_init_points::Integer = 20,
-    init_mu::Number = 0., init_sigma::Number = 1.,
-    verbose::Bool = false, verify::Integer = 4
-) = SolverOptions(
-    tol, max_iters,
-    iter_algo, iter_options,
-    init_guess, n_init_points,
-    init_mu, init_sigma,
-    verbose, verify
-)
-
-const DEFAULT_OPTIONS = SolverOptions()
 
 # ITERATING METHOD `solve_iters`
 
 function single_iter_for_i(
     problem, strat, i, init_guess,
-    options = DEFAULT_OPTIONS
+    options = SolverOptions()
 )
     obj = get_func(problem, i, strat)
     obj_(x) = obj(exp.(x))
@@ -75,7 +58,7 @@ end
 
 function solve_iters_single(
     problem::Problem, strat::Array,
-    options = DEFAULT_OPTIONS
+    options = SolverOptions()
 )
     new_strats = similar(strat)
     for i in 1:problem.n
@@ -96,11 +79,11 @@ function verify(problem, strat, options)
         higher_Xp = copy(Xp)
         lower_Xs = copy(Xs)
         lower_Xp = copy(Xp)
-        for j in 1:options.verify
-            higher_Xs[i] *= exp(100*j*options.tol)
-            higher_Xp[i] *= exp(100*j*options.tol)
-            lower_Xs[i] *= exp(-100*j*options.tol)
-            lower_Xp[i] *= exp(-100*j*options.tol)
+        for _ in 1:options.verify
+            higher_Xs[i] *= options.verify_mult
+            higher_Xp[i] *= options.verify_mult
+            lower_Xs[i] /= options.verify_mult
+            lower_Xp[i] /= options.verify_mult
             if (
                 payoff(problem, i, higher_Xs, Xp) > payoffs[i]
                 || payoff(problem, i, Xs, higher_Xp) > payoffs[i]
@@ -109,11 +92,6 @@ function verify(problem, strat, options)
             )
                 if options.verbose
                     println("Solution failed verification!")
-                    # println(payoffs[i])
-                    # println(payoff(problem, i, higher_Xs, Xp))
-                    # println(payoff(problem, i, Xs, higher_Xp))
-                    # println(payoff(problem, i, lower_Xs, Xp))
-                    # println(payoff(problem, i, Xs, lower_Xp))
                 end
                 return false
             end
@@ -125,7 +103,7 @@ end
 function solve_iters(
     problem::Problem,
     init_guess::Array,
-    options = DEFAULT_OPTIONS
+    options = SolverOptions()
 )
     strat = init_guess
     for t in 1:options.max_iters
@@ -152,7 +130,7 @@ end
 
 function solve_iters(
     problem::Problem,
-    options = DEFAULT_OPTIONS
+    options = SolverOptions()
 )
     return solve_iters(problem, fill(options.init_guess, (problem.n, 2)), options)
 end
@@ -163,7 +141,7 @@ end
 
 function solve_scatter(
     problem::Problem,
-    options = DEFAULT_OPTIONS
+    options = SolverOptions()
 )
     # draw init points from log-normal distribution
     init_points = exp.(options.init_mu .+ options.init_sigma .* randn(options.n_init_points, problem.n, 2))
@@ -191,7 +169,7 @@ end
 
 function solve_roots(
     problem::Problem,
-    options = DEFAULT_OPTIONS;
+    options = SolverOptions();
     f_tol = 1e-8,
     init_guesses::Vector{Float64} = [10.0^(3*i) for i in -2:2],
     resolve_multiple = true
@@ -239,7 +217,7 @@ end
 
 function solve_hybrid(
     problem::Problem,
-    options = DEFAULT_OPTIONS;
+    options = SolverOptions();
     init_guesses::Vector{Float64} = [10.0^(3*i) for i in -2:2]
 )
     if options.verbose
@@ -278,7 +256,7 @@ end
 # Solver for mixed strategy equilibria
 # Runs iterating solver over history of run
 
-function single_mixed_iter_for_i(problem, history, i, init_guess, options = DEFAULT_OPTIONS)
+function single_mixed_iter_for_i(problem, history, i, init_guess, options = SolverOptions())
     objs = [get_func(problem, i, history[:, :, j]) for j in size(history, 3)]
     obj_(x) = sum(obj(exp.(x)) for obj in objs)
     # jacs = [get_jac(problem, i, history[:, :, j], inplace = false) for j in size(history, 3)]
@@ -303,7 +281,7 @@ function single_mixed_iter_for_i(problem, history, i, init_guess, options = DEFA
     end
 end
 
-function single_mixed_iter(problem, history, init_guess, options = DEFAULT_OPTIONS)
+function single_mixed_iter(problem, history, init_guess, options = SolverOptions())
     new_strat = Array{Float64}(undef, problem.n, 2)
     for i in 1:problem.n
         new_strat[i, :] = single_mixed_iter_for_i(problem, history, i, init_guess[i, :], options)
@@ -313,7 +291,7 @@ end
 
 function solve_mixed(
     problem::Problem,
-    options = DEFAULT_OPTIONS
+    options = SolverOptions()
 )
     # draw init points from log-normal distribution
     history = exp.(options.init_mu .+ options.init_sigma .* randn(problem.n, 2, options.n_init_points))

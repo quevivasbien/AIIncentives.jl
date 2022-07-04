@@ -78,26 +78,28 @@ end
 
 # Functions for plotting with only single varying param
 
-function get_values_for_plot(results::Vector{SolverResult})
+function get_values_for_plot(results::Vector{SolverResult}; exclude_failed = true)
     n_steps = length(results)
     n_players = size(results[1].Xs, 1)
-    Xs = Array{Float64}(undef, n_steps, n_players) 
-    Xp = similar(Xs)
-    s = similar(Xs)
-    p = similar(Xs)
-    payoffs = similar(Xs)
+    Xs = fill(NaN, n_steps, n_players)
+    Xp = fill(NaN, n_steps, n_players)
+    s = fill(NaN, n_steps, n_players)
+    p = fill(NaN, n_steps, n_players)
+    payoffs = fill(NaN, n_steps, n_players)
     for (i, r) in enumerate(results)
-        Xs[i, :] = r.Xs
-        Xp[i, :] = r.Xp
-        s[i, :] = r.s
-        p[i, :] = r.p
-        payoffs[i, :] = r.payoffs
+        if r.success || !exclude_failed
+            Xs[i, :] = r.Xs
+            Xp[i, :] = r.Xp
+            s[i, :] = r.s
+            p[i, :] = r.p
+            payoffs[i, :] = r.payoffs
+        end
     end
     total_safety = get_total_safety(s)
     return Xs, Xp, s, p, total_safety, payoffs
 end
 
-function create_plot(results::Vector{SolverResult}, xaxis, xlabel, plotsize, labels, title, logscale)
+function create_plot(results::Vector{SolverResult}, xaxis, xlabel, plotsize, labels, title, logscale; exclude_failed = true)
     (Xs, Xp, s, p, total_safety, payoffs) = get_values_for_plot(results)
     labels_ = reshape(labels, 1, :)
     Xp_plt = plot(xaxis, Xp, xlabel = xlabel, ylabel = "Xₚ", labels = labels_)
@@ -128,7 +130,11 @@ end
 
 # functions for plotting with single varying param, scatterplot instead of line plot (for when multiple solutions are found)
 
-function get_values_for_scatterplot(results::Vector{SolverResult}, xaxis; take_avg = false)
+function get_values_for_scatterplot(results::Vector{SolverResult}, xaxis; take_avg = false, exclude_failed = true)
+    if exclude_failed
+        xaxis = [x for (x, r) in zip(xaxis, results) if r.success]
+        results = [r for r in results if r.success]
+    end
     if take_avg
         Xs = vcat((mean(r.Xs, dims = 1) for r in results)...)
         Xp = vcat((mean(r.Xp, dims = 1) for r in results)...)
@@ -152,9 +158,11 @@ end
 function create_scatterplot(
     results::Vector{SolverResult}, xaxis, xlabel,
     plotsize, labels, title, logscale;
-    take_avg = false
+    take_avg = false, exclude_failed = true
 )
-    (xaxis_, Xs, Xp, s, p, total_safety, payoffs) = get_values_for_scatterplot(results, xaxis, take_avg = take_avg)
+    (xaxis_, Xs, Xp, s, p, total_safety, payoffs) = get_values_for_scatterplot(
+        results, xaxis, take_avg = take_avg, exclude_failed = exclude_failed
+    )
     labels_ = reshape(labels, 1, :)
     Xp_plt = scatter(xaxis_, Xp, xlabel = xlabel, ylabel = "Xₚ", labels = labels_)
     Xs_plt = scatter(xaxis_, Xs, xlabel = xlabel, ylabel = "Xₛ", labels = labels_)
@@ -211,19 +219,23 @@ function get_color_palettes(n_lines, n_players)
     return palettes
 end
 
-function get_values_for_plot(results::Array{SolverResult, 2})
+function get_values_for_plot(results::Array{SolverResult, 2}; exclude_failed = true)
     (n_steps_secondary, n_steps) = size(results)
     n_players = size(results[1, 1].Xs, 1)
-    Xs = Array{Float64}(undef, n_steps_secondary, n_steps, n_players)
-    Xp = similar(Xs)
-    s = similar(Xs)
-    p = similar(Xs)
-    payoffs = similar(Xs)
-    for i in 1:n_steps_secondary
-        for j in 1:n_steps
+    Xs = fill(NaN, n_steps_secondary, n_steps, n_players)
+    Xp = fill(NaN, n_steps_secondary, n_steps, n_players)
+    s = fill(NaN, n_steps_secondary, n_steps, n_players)
+    p = fill(NaN, n_steps_secondary, n_steps, n_players)
+    payoffs = fill(NaN, n_steps_secondary, n_steps, n_players)
+    for i in 1:n_steps_secondary, j in 1:n_steps
+        if results[i, j].success || !exclude_failed
+            Xs[i, j, :] = results[i, j].Xs
+            Xp[i, j, :] = results[i, j].Xp
             s[i, j, :] = results[i, j].s
             p[i, j, :] = results[i, j].p
             payoffs[i, j, :] = results[i, j].payoffs
+        else
+            println("($i, $j): I was excluded!")
         end
     end
     total_safety = get_total_safety(s)
@@ -341,8 +353,8 @@ function _plot_helper_het(xaxis, Xs, Xp, s, p, total_safety, payoffs, xlabel, la
 end
 
 
-function create_plot(results::Array{SolverResult, 2}, xaxis, xlabel, plotsize, labels, title, logscale)
-    (Xs, Xp, s, p, total_safety, payoffs) = get_values_for_plot(results)
+function create_plot(results::Array{SolverResult, 2}, xaxis, xlabel, plotsize, labels, title, logscale; exclude_failed = true)
+    (Xs, Xp, s, p, total_safety, payoffs) = get_values_for_plot(results, exclude_failed = exclude_failed)
     players_same = are_players_same(results)
     (Xp_plt, Xs_plt, perf_plt, safety_plt, total_safety_plt, payoff_plt) = if players_same
         _plot_helper_same(xaxis, Xs, Xp, s, p, total_safety, payoffs, xlabel, labels)
@@ -516,7 +528,7 @@ end
 function solve(
     scenario::Scenario;
     method = :iters,
-    options = DEFAULT_OPTIONS
+    options = SolverOptions()
 )
     if !isnothing(scenario.secondary_varying_param)
         return solve_with_secondary_variation(
@@ -573,7 +585,8 @@ function plot_result(
     plotsize = (900, 900),
     title = nothing,
     logscale = false,
-    take_avg = false
+    take_avg = false,
+    exclude_failed = true
 )
     varying_param = getfield(res.scenario, res.scenario.varying_param)
     n_steps = size(varying_param, 1)
@@ -593,7 +606,8 @@ function plot_result(
                 labels,
                 title,
                 logscale,
-                take_avg = take_avg
+                take_avg = take_avg,
+                exclude_failed = exclude_failed
             )
         else
             create_plot(
@@ -603,7 +617,8 @@ function plot_result(
                 plotsize,
                 labels,
                 title,
-                logscale
+                logscale,
+                exclude_failed = exclude_failed
             )
         end
     else
@@ -633,7 +648,7 @@ function test_scenarios(method = :hybrid)
     B = [10., 10.]
     β = [0.5, 0.5]
     θ = [0. 0.; 0.5 0.5]
-    d = [1., 1.]
+    d = [0., 0.]
     r = range(0.01, 0.1, length = Threads.nthreads())
 
     scenario = Scenario(2, A, α, B, β, θ, d, r, secondary_varying_param = :θ)
