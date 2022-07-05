@@ -9,7 +9,7 @@ function make_grid(
     B_range = 10 .^ range(1, 3, length = 3),
     β_range = range(0.1, 0.9, step = 0.2),
     θ_range = range(0, 1, step = 0.25),
-    d_range = [0, 1],
+    d_range = [0., 1.],
     r_range = 10 .^ range(-2, 1, length = 4),
 )
     (A, α, B, β, θ, d, r) = Tuple(
@@ -31,7 +31,6 @@ function make_grid(
     σ = Vector{Float64}(undef, n_values)
     payoffs = Array{Float64}(undef, n_values, 2)
     println("Iterating over $n_values value combinations...")
-    count = 0
     Threads.@threads for i in 1:n_values
         prodFunc = ProdFunc(
             n_players,
@@ -51,9 +50,8 @@ function make_grid(
         σ[i] = prod(result.s ./ (1 .+ result.s))
         payoffs[i, :] = result.payoffs
 
-        count += 1
-        if count % 1000 == 0 || count == n_values
-            println("Completed $count of $n_values")
+        if i % 1000 == 0 || i == n_values
+            println("Completed $i of $n_values")
         end
     end
 
@@ -74,7 +72,7 @@ function make_grid(
         s2 = s[:, 2],
         p1 = p[:, 1],
         p2 = p[:, 2],
-        sigma = σ,
+        proba_safe = σ,
         payoff1 = payoffs[:, 1],
         payoff2 = payoffs[:, 2]
     )

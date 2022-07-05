@@ -11,7 +11,7 @@ Base.@kwdef struct SolverOptions
     iter_algo::Optim.AbstractOptimizer = LBFGS()
     iter_options::Optim.Options = Optim.Options(x_tol = 1e-8, iterations = 500)
     init_guess::Number = 1.
-    n_init_points::Integer = 20
+    n_points::Integer = 20
     init_mu::Number = 0.
     init_sigma::Number = 1.
     verbose::Bool = false
@@ -84,14 +84,20 @@ function verify(problem, strat, options)
             higher_Xp[i] *= options.verify_mult
             lower_Xs[i] /= options.verify_mult
             lower_Xp[i] /= options.verify_mult
-            if (
-                payoff(problem, i, higher_Xs, Xp) > payoffs[i]
-                || payoff(problem, i, Xs, higher_Xp) > payoffs[i]
-                || payoff(problem, i, lower_Xs, Xp) > payoffs[i]
-                || payoff(problem, i, Xs, lower_Xp) > payoffs[i]
+            payoff_higher_Xs = payoff(problem, i, higher_Xs, Xp)
+            payoff_higher_Xp = payoff(problem, i, Xs, higher_Xp)
+            payoff_lower_Xs = payoff(problem, i, lower_Xs, Xp)
+            payoff_lower_Xp = payoff(problem, i, Xs, lower_Xp)
+            if any(
+                (payoff_higher_Xs, payoff_higher_Xp, payoff_lower_Xs, payoff_lower_Xp) .> payoffs[i]
             )
                 if options.verbose
                     println("Solution failed verification!")
+                    println("base payoff: $(payoffs[i])")
+                    println("payoff_higher_Xs: $payoff_higher_Xs")
+                    println("payoff_higher_Xp: $payoff_higher_Xp")
+                    println("payoff_lower_Xs: $payoff_lower_Xs")
+                    println("payoff_lower_Xp: $payoff_lower_Xp")
                 end
                 return false
             end
@@ -144,9 +150,9 @@ function solve_scatter(
     options = SolverOptions()
 )
     # draw init points from log-normal distribution
-    init_points = exp.(options.init_mu .+ options.init_sigma .* randn(options.n_init_points, problem.n, 2))
+    init_points = exp.(options.init_mu .+ options.init_sigma .* randn(options.n_points, problem.n, 2))
     results = SolverResult[]
-    Threads.@threads for i in 1:options.n_init_points
+    Threads.@threads for i in 1:options.n_points
         result = solve_iters(
             problem,
             init_points[i, :, :];
@@ -257,7 +263,7 @@ end
 # Runs iterating solver over history of run
 
 function single_mixed_iter_for_i(problem, history, i, init_guess, options = SolverOptions())
-    objs = [get_func(problem, i, history[:, :, j]) for j in size(history, 3)]
+    objs = [get_func(problem, i, history[:, :, j]) for j in 1:size(history, 3)]
     obj_(x) = sum(obj(exp.(x)) for obj in objs)
     # jacs = [get_jac(problem, i, history[:, :, j], inplace = false) for j in size(history, 3)]
     # jac_!(var, x) = copy!(var, sum(jac(exp.(x)) for jac in jacs))
@@ -294,17 +300,16 @@ function solve_mixed(
     options = SolverOptions()
 )
     # draw init points from log-normal distribution
-    history = exp.(options.init_mu .+ options.init_sigma .* randn(problem.n, 2, options.n_init_points))
+    history = exp.(options.init_mu .+ options.init_sigma .* randn(problem.n, 2, options.n_points))
     for i in 1:options.max_iters
         last_history = copy(history)
-        for t in 1:options.n_init_points
+        for t in 1:options.n_points
             # on each iter, solve to maximize average payoff given current history
             # replace one of the history entries with new optimum
-            # why in the world doesn't julia just use 0-based indexing???
             history[:, :, t] = single_mixed_iter(problem, history, history[:, :, t], options)
         end
         # todo: pretty sure this never triggers when strategy is mixed, since it compare the entire history, which fluctuates
-        if maximum((history .- last_history) ./ (last_history .+ EPSILON)) < options.tol
+        if maximum(abs.((history .- last_history) ./ (last_history .+ EPSILON))) < options.tol
             if options.verbose
                 println("Exited on iteration $i")
             end
@@ -316,7 +321,7 @@ function solve_mixed(
             SolverResult(problem, true, history[:, 1, i], history[:, 2, i], prune = false),
             problem.n
         )
-        for i in 1:options.n_init_points
+        for i in 1:options.n_points
     )
     return result
 end

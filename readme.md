@@ -216,9 +216,9 @@ The other solvers available are `solve_roots`, `solve_hybrid`, `solve_scatter`, 
 
 `solve_scatter` runs `solve_iters` with multiple, randomly-selected, starting points. The returned `SolverResult` will contain the solutions from each of those starting points. (Ideally, the solutions should all be the same.)
 
-`solve_hybrid` runs a variation of `solve_iters` that attempts to maximize the best responses over a *history* of strategies. If the size of that history is large enough and the solver is run for enough iterations, the result should be a sample from a mixed strategy Nash equilibrium. You can control the history size by setting `n_init_points` in a `SolverOptions` object you provide to the solver. For example,
+`solve_hybrid` runs a variation of `solve_iters` that attempts to maximize the best responses over a *history* of strategies. If the size of that history is large enough and the solver is run for enough iterations, the result should be a sample from a mixed strategy Nash equilibrium. You can control the history size by setting `n_points` in a `SolverOptions` object you provide to the solver. For example,
 ```julia
-options = SolverOptions(n_init_points = 100)
+options = SolverOptions(n_points = 100)
 solve_mixed(problem, options)
 ```
 will return a sample of size 100 from a (proposed) mixed-strategy equilibrium for `problem`.
@@ -279,7 +279,7 @@ You can also provide a `SolverOptions` object with the `options` keyword:
 results = solve(
     scenario,
     method = :mixed, 
-    options = SolverOptions(n_init_points = 100, verbose = true)
+    options = SolverOptions(n_points = 100, verbose = true)
 )
 ```
 

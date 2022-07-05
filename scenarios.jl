@@ -450,6 +450,58 @@ function plot_payoffs(
 end
 
 
+function plot_payoffs_near_solution(problem, result::SolverResult)
+    plot(
+        plot_payoffs_with_xp(
+            problem, result.Xs, result.Xp, 1,
+            min_Xs = result.Xs[1] / 10, max_Xs = result.Xs[1] * 2 + EPSILON
+        ),
+        plot_payoffs_with_xs(
+            problem, result.Xs, result.Xp, 1,
+            min_Xp = result.Xp[1] / 10, max_Xp = result.Xp[1] * 2 + EPSILON
+        ),
+        plot_payoffs_with_xp(
+            problem, result.Xs, result.Xp, 2,
+            min_Xs = result.Xs[2] / 10, max_Xs = result.Xs[2] * 2 + EPSILON
+        ),
+        plot_payoffs_with_xs(
+            problem, result.Xs, result.Xp, 2,
+            min_Xp = result.Xp[2] / 10, max_Xp = result.Xp[2] * 2 + EPSILON
+        ),
+        layout = (2, 2)
+    )
+end
+
+
+function get_problem_from_scenario(scenario::Scenario, index::Integer)
+    if !isnothing(scenario.secondary_varying_param)
+        println("Secondary variation is not supported with this method.")
+        return
+    end
+    (_, A, α, B, β, θ, d, r) = get_params(scenario)
+
+    Problem(
+        scenario.n_players,
+        d[:, index], r[:, index],
+        ProdFunc(
+            scenario.n_players,
+            A[:, index], α[:, index],
+            B[:, index], β[:, index],
+            θ[:, index]
+        ),
+        scenario.csf
+    )
+end
+
+
+function plot_payoffs_near_solution(result::ScenarioResult, index::Integer)
+    problem = get_problem_from_scenario(result.scenario, index)
+    if isnothing(problem)
+        return
+    end
+    plot_payoffs_near_solution(problem, result.solverResults[index])
+end
+
 # SOLVER FUNCTIONS:
 
 function get_result(problem, method, options)
@@ -467,16 +519,7 @@ function get_result(problem, method, options)
     return solve_func(problem, options)
 end
 
-
-function solve_with_secondary_variation(
-    scenario::Scenario,
-    method,
-    options
-)
-    if method == :scatter || method == :mixed
-        println("Secondary variation is unsupported with the mixed or scatter solvers.")
-        return ScenarioResult(SolverResult[], plot())
-    end
+function get_params_with_secondary_variation(scenario)
     varying_param = transpose(getfield(scenario, scenario.varying_param))
     n_steps = size(varying_param, 2)
     secondary_varying_param = transpose(getfield(scenario, scenario.secondary_varying_param))
@@ -509,6 +552,21 @@ function solve_with_secondary_variation(
             )
         end
     end
+    return (n_steps, n_steps_secondary), A, α, B, β, θ, d, r
+end
+
+function solve_with_secondary_variation(
+    scenario::Scenario,
+    method,
+    options
+)
+    if method == :scatter || method == :mixed
+        println("Secondary variation is unsupported with the mixed or scatter solvers.")
+        return ScenarioResult(SolverResult[], plot())
+    end
+    
+    ((n_steps, n_steps_secondary), A, α, B, β, θ, d, r) = get_params_with_secondary_variation(scenario)
+
     results = Array{SolverResult}(undef, (n_steps_secondary, n_steps))
     Threads.@threads for i in 1:n_steps
         Threads.@threads for j in 1:n_steps_secondary
@@ -524,20 +582,7 @@ function solve_with_secondary_variation(
     return ScenarioResult(scenario, results)
 end
 
-
-function solve(
-    scenario::Scenario;
-    method = :iters,
-    options = SolverOptions()
-)
-    if !isnothing(scenario.secondary_varying_param)
-        return solve_with_secondary_variation(
-            scenario,
-            method,
-            options
-        )
-    end
-
+function get_params(scenario)
     varying_param = transpose(getfield(scenario, scenario.varying_param))
     n_steps = size(varying_param, 2)
     
@@ -567,6 +612,23 @@ function solve(
             )
         end
     end
+    return n_steps, A, α, B, β, θ, d, r
+end
+
+function solve(
+    scenario::Scenario;
+    method = :iters,
+    options = SolverOptions()
+)
+    if !isnothing(scenario.secondary_varying_param)
+        return solve_with_secondary_variation(
+            scenario,
+            method,
+            options
+        )
+    end
+
+    (n_steps, A, α, B, β, θ, d, r) = get_params(scenario)
 
     results = Array{SolverResult}(undef, n_steps)
     # send to solver
