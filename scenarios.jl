@@ -65,17 +65,6 @@ function extract(res::ScenarioResult, field::Symbol)
 end
 
 
-# Helper functions
-
-function linspace(start, stop, steps, reps = 1)
-    return repeat(range(start, stop=stop, length=steps), 1, reps)
-end
-
-function mean(x; dims)
-    sum(x, dims = dims) ./ size(x, dims)
-end
-
-
 # Functions for plotting with only single varying param
 
 function get_values_for_plot(results::Vector{SolverResult}; exclude_failed = true)
@@ -136,12 +125,12 @@ function get_values_for_scatterplot(results::Vector{SolverResult}, xaxis; take_a
         results = [r for r in results if r.success]
     end
     if take_avg
-        Xs = vcat((mean(r.Xs, dims = 1) for r in results)...)
-        Xp = vcat((mean(r.Xp, dims = 1) for r in results)...)
-        s = vcat((mean(r.s, dims = 1) for r in results)...)
-        p = vcat((mean(r.p, dims = 1) for r in results)...)
-        payoffs = vcat((mean(r.payoffs, dims = 1) for r in results)...)
-        total_safety = vcat((mean(get_total_safety(r.s), dims = 1) for r in results)...)
+        Xs = vcat((mean(r.Xs, dim = 1) for r in results)...)
+        Xp = vcat((mean(r.Xp, dim = 1) for r in results)...)
+        s = vcat((mean(r.s, dim = 1) for r in results)...)
+        p = vcat((mean(r.p, dim = 1) for r in results)...)
+        payoffs = vcat((mean(r.payoffs, dim = 1) for r in results)...)
+        total_safety = vcat((mean(get_total_safety(r.s), dim = 1) for r in results)...)
         return xaxis, Xs, Xp, s, p, total_safety, payoffs
     else
         xaxis_ = vcat((fill(x, size(r.Xs, 1)) for (x, r) in zip(xaxis, results))...)
@@ -265,7 +254,7 @@ end
 function _plot_helper_same(xaxis, Xs, Xp, s, p, total_safety, payoffs, xlabel, labels)
     n_steps_secondary = size(s)[1]
     colors = get_colors(n_steps_secondary)
-    combine_values(x) = mean(x, dims=2)
+    combine_values(x) = mean(x, dim=2)
     (Xp_plt, Xs_plt, perf_plt, safety_plt, payoff_plt) = (
         plot(
             xaxis, combine_values(x[1, :, :]),
@@ -505,8 +494,8 @@ end
 # SOLVER FUNCTIONS:
 
 function get_result(problem, method, options)
-    solve_func = if method == :hybrid
-        solve_hybrid
+    solve_func = if method == :iters
+        solve_iters
     elseif method == :roots
         solve_roots
     elseif method == :scatter
@@ -514,7 +503,7 @@ function get_result(problem, method, options)
     elseif method == :mixed
         solve_mixed
     else
-        solve_iters
+        solve_hybrid
     end
     return solve_func(problem, options)
 end

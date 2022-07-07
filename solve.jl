@@ -15,8 +15,100 @@ Base.@kwdef struct SolverOptions
     init_mu::Number = 0.
     init_sigma::Number = 1.
     verbose::Bool = false
-    verify::Integer = 1
+    verify::Bool = true
     verify_mult::Number = 1.1
+    retries::Integer = 0
+end
+
+function SolverOptions(options::SolverOptions; kwargs...)
+    fields = ((f in kwargs.itr) ? kwargs[f] : getfield(options, f) for f in fieldnames(SolverOptions))
+    return SolverOptions(fields...)
+end
+
+# Some helper functions
+
+function mean(x; dim)
+    sum(x, dims = dim) ./ size(x, dim)
+end
+
+function mean(x)
+    sum(x) ./ length(x)
+end
+
+function slices_approx_equal(array, dim, atol, rtol)
+    all(
+        isapprox(
+            selectdim(array, dim, 1), selectdim(array, dim, i),
+            atol = atol, rtol = rtol
+        )
+        for i in 2:size(array, dim)
+    )
+end
+
+function is_napprox_greater(a, b)
+    a > b && a ≉ b
+end
+
+function verify(problem, strat, options)
+    # Checks some points around the given strat
+    # returns true if strat satisfies optimality (in nash eq. sense) at those points
+    # won't always catch wrong solutions, but does a decent job
+    Xs = strat[:, 1]
+    Xp = strat[:, 2]
+    payoffs = all_payoffs(problem, Xs, Xp)
+    for i in 1:problem.n
+        higher_Xs = setindex!(
+            copy(Xs),
+            (Xs[i] == 0) ? EPSILON : options.verify_mult * Xs[i],
+            i
+        )
+        higher_Xp = setindex!(
+            copy(Xp),
+            (Xp[i] == 0) ? EPSILON : options.verify_mult * Xp[i],
+            i
+        )
+        lower_Xs = setindex!(copy(Xs), Xs[i] * options.verify_mult, i)
+        lower_Xp = setindex!(copy(Xp), Xp[i] * options.verify_mult, i)
+
+        payoff_higher_Xs = payoff(problem, i, higher_Xs, Xp)
+        payoff_higher_Xp = payoff(problem, i, Xs, higher_Xp)
+        payoff_lower_Xs = payoff(problem, i, lower_Xs, Xp)
+        payoff_lower_Xp = payoff(problem, i, Xs, lower_Xp)
+        
+        mirror_Xs = setindex!(
+            copy(Xs),
+            (sum(Xs) - Xs[i]) / (length(Xs) - 1),
+            i
+        )
+        mirror_Xp = setindex!(
+            copy(Xp),
+            (sum(Xp) - Xp[i]) / (length(Xp) - 1),
+            i
+        )
+        payoff_mirror = payoff(problem, i, mirror_Xs, mirror_Xp)
+        if any(is_napprox_greater.(
+            (
+                payoff_higher_Xs,
+                payoff_higher_Xp,
+                payoff_lower_Xs,
+                payoff_lower_Xp,
+                payoff_mirror
+            ),
+            payoffs[i]
+        ))
+            if options.verbose
+                println("Solution failed verification!")
+                println("| Xs = $Xs, Xp = $Xp: $(payoffs[i])")
+                println("| Xs[$i] = $(higher_Xs[i]): $payoff_higher_Xs")
+                println("| Xp[$i] = $(higher_Xp[i]): $payoff_higher_Xp")
+                println("| Xs[$i] = $(lower_Xs[i]): $payoff_lower_Xs")
+                println("| Xp[$i] = $(lower_Xp[i]): $payoff_lower_Xp")
+                println("∟ Symmetric: $payoff_mirror")
+            end
+            return false
+        end
+    end
+    return true
 end
 
 # ITERATING METHOD `solve_iters`
@@ -56,7 +148,7 @@ function single_iter_for_i(
     end
 end
 
-function solve_iters_single(
+function solve_single_iter(
     problem::Problem, strat::Array,
     options = SolverOptions()
 )
@@ -67,71 +159,67 @@ function solve_iters_single(
     return new_strats
 end
 
-function verify(problem, strat, options)
-    # Checks some points around the given strat
-    # returns true if strat satisfies optimality (in nash eq. sense) at those points
-    # won't always catch wrong solutions, but does a decent job
-    Xs = strat[:, 1]
-    Xp = strat[:, 2]
-    payoffs = all_payoffs(problem, Xs, Xp)
-    for i in 1:problem.n
-        higher_Xs = copy(Xs)
-        higher_Xp = copy(Xp)
-        lower_Xs = copy(Xs)
-        lower_Xp = copy(Xp)
-        for _ in 1:options.verify
-            higher_Xs[i] *= options.verify_mult
-            higher_Xp[i] *= options.verify_mult
-            lower_Xs[i] /= options.verify_mult
-            lower_Xp[i] /= options.verify_mult
-            payoff_higher_Xs = payoff(problem, i, higher_Xs, Xp)
-            payoff_higher_Xp = payoff(problem, i, Xs, higher_Xp)
-            payoff_lower_Xs = payoff(problem, i, lower_Xs, Xp)
-            payoff_lower_Xp = payoff(problem, i, Xs, lower_Xp)
-            if any(
-                (payoff_higher_Xs, payoff_higher_Xp, payoff_lower_Xs, payoff_lower_Xp) .> payoffs[i]
-            )
-                if options.verbose
-                    println("Solution failed verification!")
-                    println("base payoff: $(payoffs[i])")
-                    println("payoff_higher_Xs: $payoff_higher_Xs")
-                    println("payoff_higher_Xp: $payoff_higher_Xp")
-                    println("payoff_lower_Xs: $payoff_lower_Xs")
-                    println("payoff_lower_Xp: $payoff_lower_Xp")
-                end
-                return false
-            end
-        end
+function set_higher(x, y, multiplier)
+    if x != 0
+        x * multiplier
+    elseif y == 0
+        EPSILON
+    else
+        y
     end
-    return true
 end
-    
-function solve_iters(
-    problem::Problem,
-    init_guess::Array,
-    options = SolverOptions()
-)
+
+function suggest_iter_strat(problem, init_guess, options)
     strat = init_guess
-    for t in 1:options.max_iters
-        new_strat = solve_iters_single(problem, strat, options)
-        if maximum(abs.(new_strat - strat) ./ (strat .+ EPSILON)) < options.tol
+    for i in 1:options.max_iters
+        new_strat = solve_single_iter(problem, strat, options)
+        if all(isapprox.(
+            log.(new_strat), log.(strat),
+            atol = EPSILON, rtol = options.tol
+        ))
             if options.verbose
-                println("Exited on iteration $t")
+                println("Converged on iteration $i")
             end
-            success = options.verify == 0 || verify(problem, new_strat, options)
-            return SolverResult(
-                problem,
-                success,
-                new_strat[:, 1], new_strat[:, 2],
-                prune = false
-            )
+            return true, new_strat
         end
         strat = new_strat
     end
     if options.verbose
         println("Reached max iterations")
     end
-    return SolverResult(problem, false, strat[:, 1], strat[:, 2])
+    return false, strat
+end
+
+function attempt_zero_solution(problem, options)
+    if options.verbose
+        println("Attempting all-zero solution")
+    end
+    converged, strat = suggest_iter_strat(problem, fill(0., problem.n, 2), options)
+    success = converged && (!options.verify || verify(problem, strat, options))
+    return SolverResult(problem, success, strat[:, 1], strat[:, 2], prune = false)
+end
+
+function solve_iters(
+    problem::Problem,
+    init_guess::Array,
+    options = SolverOptions()
+)
+    converged, strat = suggest_iter_strat(problem, init_guess, options)
+    success = converged && (!options.verify || verify(problem, strat, options))
+    if success
+        return SolverResult(problem, true, strat[:, 1], strat[:, 2], prune = false)
+    elseif options.retries > 0
+        if options.verbose
+            println("Retrying...")
+        end
+        return solve_iters(
+            problem,
+            exp.(options.init_mu .+ options.init_sigma .* randn(problem.n, 2)),
+            SolverOptions(options, retries = options.retries - 1)
+        )
+    else
+        return attempt_zero_solution(problem, options)
+    end
 end
 
 function solve_iters(
@@ -200,7 +288,7 @@ function solve_roots(
             method = :trust_region  # this is just the default
         )
         solution = reshape(exp.(res.zero), (problem.n, 2))
-        if res.f_converged && (options.verify == 0 || verify(problem, solution, options))
+        if res.f_converged && (!options.verify || verify(problem, solution, options))
             successes[i] = true
             results[i, :, :] = solution
         end
@@ -219,46 +307,6 @@ function solve_roots(
 end
 
 
-# HYBRID METHOD (Runs root-finding method, then iterating method)
-
-function solve_hybrid(
-    problem::Problem,
-    options = SolverOptions();
-    init_guesses::Vector{Float64} = [10.0^(3*i) for i in -2:2]
-)
-    if options.verbose
-        println("Finding roots...")
-    end
-    roots_sol = solve_roots(problem, options, init_guesses = init_guesses, resolve_multiple = false)
-    if !roots_sol.success
-        return roots_sol
-    end
-    strats = cat(
-        # reshape needed if there's only 1 solution
-        reshape(roots_sol.Xs, :, problem.n),
-        reshape(roots_sol.Xp, :, problem.n),
-        dims = 3
-    )
-    n_tries = size(strats)[1]
-    results = SolverResult[]
-    if options.verbose
-        println("Iterating...")
-    end
-    Threads.@threads for i in 1:n_tries
-        strats_ = copy(selectdim(strats, 1, i))
-        iter_sol = solve_iters(problem, strats_, options)
-        if iter_sol.success
-            push!(results, iter_sol)
-        end
-    end
-    if length(results) == 0
-        return get_null_result(problem.n)
-    end
-    combined_sols = sum([make_3d(r, problem.n) for r in results])
-    return resolve_multiple_solutions(prune_duplicates(combined_sols), problem)
-end
-
-
 # Solver for mixed strategy equilibria
 # Runs iterating solver over history of run
 
@@ -271,19 +319,26 @@ function single_mixed_iter_for_i(problem, history, i, init_guess, options = Solv
     if all(init_guess .== 0.)
         init_guess = exp.(options.init_mu .+ options.init_sigma .* randn(2))
     end
-    res = optimize(
-        obj_,
-        # jac_!,
-        log.(init_guess),
-        options.iter_algo,
-        options.iter_options
-    )
-    # check the zero-input payoff
-    zero_payoff = sum(obj([0., 0.]) for obj in objs)
-    if zero_payoff > -Optim.minimum(res)
-        return [0., 0.]
-    else
-        return exp.(Optim.minimizer(res))
+    try
+        res = optimize(
+            obj_,
+            # jac_!,
+            log.(init_guess),
+            options.iter_algo,
+            options.iter_options
+        )
+        # check the zero-input payoff
+        zero_payoff = sum(obj([0., 0.]) for obj in objs)
+        if zero_payoff > -Optim.minimum(res)
+            return [0., 0.]
+        else
+            return exp.(Optim.minimizer(res))
+        end
+    catch e
+        if options.verbose
+            println("Warning: Encountered $e, returning NaN")
+        end
+        return [NaN, NaN]
     end
 end
 
@@ -308,8 +363,11 @@ function solve_mixed(
             # replace one of the history entries with new optimum
             history[:, :, t] = single_mixed_iter(problem, history, history[:, :, t], options)
         end
-        # todo: pretty sure this never triggers when strategy is mixed, since it compare the entire history, which fluctuates
-        if maximum(abs.((history .- last_history) ./ (last_history .+ EPSILON))) < options.tol
+        # todo: pretty sure this never triggers when strategy is mixed, since it compares the entire history, which fluctuates
+        if all(isapprox.(
+            log.(history), log.(last_history),
+            atol = EPSILON, rtol = options.tol
+        ))
             if options.verbose
                 println("Exited on iteration $i")
             end
@@ -326,7 +384,60 @@ function solve_mixed(
     return result
 end
 
-    
+
+# HYBRID METHOD (Runs solve_iter, then solve_mixed if that is unsuccessful. Finds only pure strategies.)
+
+function attempt_mixed(problem, options)
+    mixed_sol = solve_mixed(problem, SolverOptions(options))
+    if (
+        mixed_sol.success
+        && slices_approx_equal(log.(mixed_sol.Xs), 1, EPSILON, sqrt(options.tol))
+        && slices_approx_equal(log.(mixed_sol.Xp), 1, EPSILON, sqrt(options.tol))
+    )
+        return SolverResult(
+            problem, true,
+            vec(mean(mixed_sol.Xs, dim = 1)), vec(mean(mixed_sol.Xp, dim = 1)),
+            prune = false
+        )
+    elseif options.retries > 0
+        if options.verbose
+            println("solve_mixed failed. Retrying...")
+        end
+        return attempt_mixed(problem, SolverOptions(options, retries = options.retries - 1))
+    else
+        if options.verbose
+            println("solve_mixed also failed")
+            println("| solution was Xs = $(mixed_sol.Xs), Xp = $(mixed_sol.Xp)")
+            println("∟ returning null result")
+        end
+        return get_null_result(problem.n)
+    end
+end
+
+function solve_hybrid(
+    problem::Problem,
+    init_guess::Array,
+    options = SolverOptions(n_points = 2)
+)
+    iter_sol = solve_iters(problem, init_guess, options)
+    if iter_sol.success
+        return iter_sol
+    end
+
+    if options.verbose
+        println("solve_iters failed, trying mixed solver")
+    end
+    return attempt_mixed(problem, options)
+end
+
+function solve_hybrid(
+    problem::Problem,
+    options = SolverOptions()
+)
+    return solve_hybrid(problem, fill(options.init_guess, (problem.n, 2)), options)
+end
+
+
 function test_solve()
     println("Running test on `solve.jl`...")
     prodFunc = ProdFunc([10., 10.], [0.5, 0.5], [10., 10.], [0.5, 0.5], [0.25, 0.25])
@@ -339,11 +450,11 @@ function test_solve()
     println("With `solve_roots`:")
     @time solve_roots_sol = solve_roots(problem, options)
     print(solve_roots_sol)
-    println("With `solve_hybrid`:")
-    @time solve_hybrid_sol = solve_hybrid(problem, options)
-    print(solve_roots_sol)
     println("With `solve_mixed`:")
     @time solve_mixed_sol = solve_mixed(problem, options)
     print(solve_mixed_sol)
+    println("With `solve_hybrid`:")
+    @time solve_hybrid_sol = solve_hybrid(problem, options)
+    print(solve_hybrid_sol)
     return
 end
