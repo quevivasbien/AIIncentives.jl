@@ -11,7 +11,7 @@ function make_grid(
     θ_range = range(0, 2, step = 0.25),
     d_range = [0., 1.],
     r_range = 10 .^ range(-2, 1, length = 8),
-    options = SolverOptions()
+    options = SolverOptions(retries = 1_000)
 )
     (A, α, B, β, θ, d, r) = Tuple(
         getindex.(
@@ -57,6 +57,9 @@ function make_grid(
             println("Completed $count of $n_values")
         end
     end
+
+    n_successes = sum(success)
+    println("$n_successes / $count successful ($(round(100 * n_successes / count, digits = 1))%)")
 
     DataFrame(
         A = A,

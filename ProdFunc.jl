@@ -157,3 +157,10 @@ function all_rewards_and_derivs(csf::CSF, p::Vector)
         + (csf.w - csf.l .+ (csf.a_w - csf.a_l) .* p) .* win_proba_derivs
     )
 end
+
+function is_symmetric(prodFunc::ProdFunc)
+    all(
+        all(x[1] .== x[2:prodFunc.n])
+        for x in (prodFunc.A, prodFunc.α, prodFunc.B, prodFunc.β, prodFunc.θ)
+    )
+end

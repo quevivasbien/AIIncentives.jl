@@ -1,7 +1,7 @@
 using Optim
 using NLsolve
 
-include("./Problem.jl")
+include("./SolverResult.jl")
 
 const EPSILON = 1e-8  # small number to help numerical stability in some places
 
@@ -50,12 +50,22 @@ function is_napprox_greater(a, b)
 end
 
 function verify(problem, strat, options)
-    # Checks some points around the given strat
-    # returns true if strat satisfies optimality (in nash eq. sense) at those points
-    # won't always catch wrong solutions, but does a decent job
     Xs = strat[:, 1]
     Xp = strat[:, 2]
     payoffs = all_payoffs(problem, Xs, Xp)
+    if (
+        is_symmetric(problem)
+        && !all(isapprox.(payoffs[1], payoffs[2:problem.n], rtol = sqrt(options.tol)))
+    )
+        if options.verbose
+            println("Solution should be symmetric but is not")
+        end
+        return false
+    end
+
+    # Check some points around the given strat
+    # returns true if strat satisfies optimality (in nash eq. sense) at those points
+    # won't always catch wrong solutions, but does a decent job
     for i in 1:problem.n
         higher_Xs = setindex!(
             copy(Xs),
@@ -141,6 +151,9 @@ function single_iter_for_i(
             return exp.(Optim.minimizer(res))
         end
     catch e
+        if isa(e, InterruptException)
+            throw(e)
+        end
         if options.verbose
             println("Warning: Encountered $e, returning NaN")
         end
@@ -157,16 +170,6 @@ function solve_single_iter(
         new_strats[i, :] = single_iter_for_i(problem, strat, i, strat[i, :], options)
     end
     return new_strats
-end
-
-function set_higher(x, y, multiplier)
-    if x != 0
-        x * multiplier
-    elseif y == 0
-        EPSILON
-    else
-        y
-    end
 end
 
 function suggest_iter_strat(problem, init_guess, options)
@@ -335,6 +338,9 @@ function single_mixed_iter_for_i(problem, history, i, init_guess, options = Solv
             return exp.(Optim.minimizer(res))
         end
     catch e
+        if isa(e, InterruptException)
+            throw(e)
+        end
         if options.verbose
             println("Warning: Encountered $e, returning NaN")
         end
@@ -420,6 +426,7 @@ function solve_hybrid(
     options = SolverOptions(n_points = 2)
 )
     iter_sol = solve_iters(problem, init_guess, options)
+    println("iter_sol successful")
     if iter_sol.success
         return iter_sol
     end
@@ -432,7 +439,7 @@ end
 
 function solve_hybrid(
     problem::Problem,
-    options = SolverOptions()
+    options = SolverOptions(n_points = 2)
 )
     return solve_hybrid(problem, fill(options.init_guess, (problem.n, 2)), options)
 end
