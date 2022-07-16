@@ -5,18 +5,18 @@ include("./SolverResult.jl")
 
 const EPSILON = 1e-8  # small number to help numerical stability in some places
 
-Base.@kwdef struct SolverOptions
-    tol::Number = 1e-6
+Base.@kwdef struct SolverOptions{T <: AbstractFloat}
+    tol::T = 1e-6
     max_iters::Integer = 100
-    iter_algo::Optim.AbstractOptimizer = LBFGS()
+    iter_algo::Optim.AbstractOptimizer = NelderMead()
     iter_options::Optim.Options = Optim.Options(x_tol = 1e-8, iterations = 500)
-    init_guess::Number = 1.
+    init_guess::T = 1.
     n_points::Integer = 20
-    init_mu::Number = 0.
-    init_sigma::Number = 1.
+    init_mu::T = 0.
+    init_sigma::T = 1.
     verbose::Bool = false
     verify::Bool = true
-    verify_mult::Number = 1.1
+    verify_mult::T = 1.1
     retries::Integer = 0
 end
 
@@ -45,8 +45,8 @@ function slices_approx_equal(array, dim, atol, rtol)
     )
 end
 
-function is_napprox_greater(a, b)
-    a > b && a ≉ b
+function is_napprox_greater(a, b; rtol = EPSILON)
+    a > b && !isapprox(a, b, rtol = rtol)
 end
 
 function verify(problem, strat, options)
@@ -104,7 +104,8 @@ function verify(problem, strat, options)
                 payoff_lower_Xp,
                 payoff_mirror
             ),
-            payoffs[i]
+            payoffs[i],
+            rtol = sqrt(options.tol)
         ))
             if options.verbose
                 println("Solution failed verification!")
@@ -134,7 +135,9 @@ function single_iter_for_i(
     # jac_!(var, x) = copy!(var, exp.(x) .* jac(exp.(x)))
     # if init_guess is zero-effort, try breaking out
     if all(init_guess .== 0.)
-        init_guess = exp.(options.init_mu .+ options.init_sigma .* randn(2))
+        init_guess = exp.(
+            (options.init_mu .+ options.init_sigma .* randn(2))
+        )
     end
     try
         res = optimize(
@@ -144,8 +147,8 @@ function single_iter_for_i(
             options.iter_algo,
             options.iter_options
         )
-        # check the zero-input payoff
-        if obj([0., 0.]) > -Optim.minimum(res)
+        # if θ == 0, need to check the zero-input payoff
+        if any(problem.prodFunc.θ .!= 0.) && obj([0., 0.]) > -Optim.minimum(res)
             return [0., 0.]
         else
             return exp.(Optim.minimizer(res))
@@ -369,7 +372,7 @@ function solve_mixed(
             # replace one of the history entries with new optimum
             history[:, :, t] = single_mixed_iter(problem, history, history[:, :, t], options)
         end
-        # todo: pretty sure this never triggers when strategy is mixed, since it compares the entire history, which fluctuates
+        # todo: this might never trigger when strategy is mixed, since it compares the entire history, which fluctuates
         if all(isapprox.(
             log.(history), log.(last_history),
             atol = EPSILON, rtol = options.tol
@@ -426,7 +429,6 @@ function solve_hybrid(
     options = SolverOptions(n_points = 2)
 )
     iter_sol = solve_iters(problem, init_guess, options)
-    println("iter_sol successful")
     if iter_sol.success
         return iter_sol
     end
@@ -442,6 +444,34 @@ function solve_hybrid(
     options = SolverOptions(n_points = 2)
 )
     return solve_hybrid(problem, fill(options.init_guess, (problem.n, 2)), options)
+end
+
+
+# general purpose solver function
+function solve(problem::Problem, method = :iters, options = SolverOptions())
+    solve_func = if method == :iters
+        solve_iters
+    elseif method == :roots
+        solve_roots
+    elseif method == :scatter
+        solve_scatter
+    elseif method == :mixed
+        solve_mixed
+    elseif method == :hybrid
+        solve_hybrid
+    else
+        throw(ArgumentError("Invalid method $method"))
+    end
+    return solve_func(problem, options)
+end
+
+function solve(
+    problem::Problem;
+    method = :iters,
+    kwargs...
+)
+    options = SolverOptions(SolverOptions(); kwargs...)
+    return solve(problem, method, options)
 end
 
 

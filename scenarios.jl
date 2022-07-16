@@ -75,6 +75,7 @@ function get_values_for_plot(results::Vector{SolverResult}; exclude_failed = tru
     s = fill(NaN, n_steps, n_players)
     p = fill(NaN, n_steps, n_players)
     payoffs = fill(NaN, n_steps, n_players)
+    total_safety = fill(NaN, n_steps)
     for (i, r) in enumerate(results)
         if r.success || !exclude_failed
             Xs[i, :] = r.Xs
@@ -82,14 +83,14 @@ function get_values_for_plot(results::Vector{SolverResult}; exclude_failed = tru
             s[i, :] = r.s
             p[i, :] = r.p
             payoffs[i, :] = r.payoffs
+            total_safety[i] = get_total_safety(r.s)
         end
     end
-    total_safety = get_total_safety(s)
     return Xs, Xp, s, p, total_safety, payoffs
 end
 
 function create_plot(results::Vector{SolverResult}, xaxis, xlabel, plotsize, labels, title, logscale; exclude_failed = true)
-    (Xs, Xp, s, p, total_safety, payoffs) = get_values_for_plot(results)
+    (Xs, Xp, s, p, total_safety, payoffs) = get_values_for_plot(results; exclude_failed)
     labels_ = reshape(labels, 1, :)
     Xp_plt = plot(xaxis, Xp, xlabel = xlabel, ylabel = "Xₚ", labels = labels_)
     Xs_plt = plot(xaxis, Xs, xlabel = xlabel, ylabel = "Xₛ", labels = labels_)
@@ -112,7 +113,7 @@ function create_plot(results::Vector{SolverResult}, xaxis, xlabel, plotsize, lab
         left_margin = 20px
     )
     if !isnothing(title)
-        title!(title)
+        plot!(plot_title = title)
     end
     return final_plot
 end
@@ -175,7 +176,7 @@ function create_scatterplot(
         left_margin = 20px
     )
     if !isnothing(title)
-        title!(title)
+        plot!(plot_title = title)
     end
     return final_plot
 end
@@ -216,6 +217,7 @@ function get_values_for_plot(results::Array{SolverResult, 2}; exclude_failed = t
     s = fill(NaN, n_steps_secondary, n_steps, n_players)
     p = fill(NaN, n_steps_secondary, n_steps, n_players)
     payoffs = fill(NaN, n_steps_secondary, n_steps, n_players)
+    total_safety = fill(NaN, n_steps_secondary, n_steps)
     for i in 1:n_steps_secondary, j in 1:n_steps
         if results[i, j].success || !exclude_failed
             Xs[i, j, :] = results[i, j].Xs
@@ -223,11 +225,9 @@ function get_values_for_plot(results::Array{SolverResult, 2}; exclude_failed = t
             s[i, j, :] = results[i, j].s
             p[i, j, :] = results[i, j].p
             payoffs[i, j, :] = results[i, j].payoffs
-        else
-            println("($i, $j): I was excluded!")
+            total_safety[i, j] = get_total_safety(results[i, j].s)
         end
     end
-    total_safety = get_total_safety(s)
     return Xs, Xp, s, p, total_safety, payoffs
 end
 
@@ -363,7 +363,7 @@ function create_plot(results::Array{SolverResult, 2}, xaxis, xlabel, plotsize, l
         left_margin = 20px
     )
     if !isnothing(title)
-        title!(title)
+        plot!(plot_title = title)
     end
     return final_plot
 end
@@ -462,21 +462,24 @@ function plot_payoffs_near_solution(problem, result::SolverResult)
 end
 
 
-function get_problem_from_scenario(scenario::Scenario, index::Integer)
-    if !isnothing(scenario.secondary_varying_param)
-        println("Secondary variation is not supported with this method.")
-        return
+function get_problem_from_scenario(scenario::Scenario, index)
+    if index isa Integer
+        @assert isnothing(scenario.secondary_varying_param)
     end
-    (_, A, α, B, β, θ, d, r) = get_params(scenario)
+    (_, A, α, B, β, θ, d, r) = if isnothing(scenario.secondary_varying_param)
+        get_params(scenario)
+    else
+        get_params_with_secondary_variation(scenario)
+    end
 
     Problem(
         scenario.n_players,
-        d[:, index], r[:, index],
+        d[:, index...], r[:, index...],
         ProdFunc(
             scenario.n_players,
-            A[:, index], α[:, index],
-            B[:, index], β[:, index],
-            θ[:, index]
+            A[:, index...], α[:, index...],
+            B[:, index...], β[:, index...],
+            θ[:, index...]
         ),
         scenario.csf
     )
@@ -492,21 +495,6 @@ function plot_payoffs_near_solution(result::ScenarioResult, index::Integer)
 end
 
 # SOLVER FUNCTIONS:
-
-function get_result(problem, method, options)
-    solve_func = if method == :iters
-        solve_iters
-    elseif method == :roots
-        solve_roots
-    elseif method == :scatter
-        solve_scatter
-    elseif method == :mixed
-        solve_mixed
-    else
-        solve_hybrid
-    end
-    return solve_func(problem, options)
-end
 
 function get_params_with_secondary_variation(scenario)
     varying_param = transpose(getfield(scenario, scenario.varying_param))
@@ -551,7 +539,7 @@ function solve_with_secondary_variation(
 )
     if method == :scatter || method == :mixed
         println("Secondary variation is unsupported with the mixed or scatter solvers.")
-        return ScenarioResult(SolverResult[], plot())
+        return ScenarioResult(scenario, SolverResult[])
     end
     
     ((n_steps, n_steps_secondary), A, α, B, β, θ, d, r) = get_params_with_secondary_variation(scenario)
@@ -561,7 +549,7 @@ function solve_with_secondary_variation(
         Threads.@threads for j in 1:n_steps_secondary
             prodFunc = ProdFunc(A[:, i, j], α[:, i, j], B[:, i, j], β[:, i, j], θ[:, i, j])
             problem = Problem(d[:, i, j], r[:, i, j],  prodFunc, scenario.csf)
-            results[j, i] = get_result(problem, method, options)
+            results[j, i] = solve(problem, method, options)
         end
     end
     if options.verbose
@@ -605,7 +593,7 @@ function get_params(scenario)
 end
 
 function solve(
-    scenario::Scenario;
+    scenario::Scenario,
     method = :iters,
     options = SolverOptions()
 )
@@ -624,10 +612,15 @@ function solve(
     Threads.@threads for i in 1:n_steps
         prodFunc = ProdFunc(A[:, i], α[:, i], B[:, i], β[:, i], θ[:, i])
         problem = Problem(d[:, i], r[:, i],  prodFunc, scenario.csf)
-        results[i] = get_result(problem, method, options)
+        results[i] = solve(problem, method, options)
     end
 
     return ScenarioResult(scenario, results)
+end
+
+function solve(scenario::Scenario; method = :iters, kwargs...)
+    options = SolverOptions(SolverOptions(); kwargs...)
+    return solve(scenario, method, options)
 end
 
 
@@ -704,6 +697,6 @@ function test_scenarios(method = :hybrid)
 
     scenario = Scenario(2, A, α, B, β, θ, d, r, secondary_varying_param = :θ)
 
-    @time res = solve(scenario, method = method, options = SolverOptions(verbose = true))
+    @time res = solve(scenario, method = method, verbose  = true)
     plot_result(res)
 end
