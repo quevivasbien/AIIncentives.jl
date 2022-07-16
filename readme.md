@@ -1,8 +1,8 @@
-# ai-julia
+# AIIncentives.jl
 
 ## What is this?
 
-The code in [this repository](https://github.com/quevivasbien/ai-julia) is meant to find Nash equilibria for the following model:
+The code in this repository is meant to find Nash equilibria for the following model:
 
 We assume that *n* players produce safety, *s*, and performance, *p*, as
 
@@ -301,3 +301,4 @@ plot_result(
 ## More about plotting
 
 To-do
+

@@ -1,8 +1,3 @@
-using Optim
-using NLsolve
-
-include("./SolverResult.jl")
-
 const EPSILON = 1e-8  # small number to help numerical stability in some places
 
 Base.@kwdef struct SolverOptions{T <: AbstractFloat}

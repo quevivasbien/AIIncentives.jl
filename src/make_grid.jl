@@ -1,6 +1,3 @@
-using DataFrames
-include("scenarios.jl")
-
 function make_grid(
     ;
     n_players = 2,

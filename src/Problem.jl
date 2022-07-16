@@ -1,7 +1,3 @@
-include("./ProdFunc.jl")
-include("./CSF.jl")
-
-
 function get_total_safety(s::AbstractArray)
     probas = s ./ (1. .+ s)
     # if s is infinite, proba should be 1
@@ -14,7 +10,6 @@ function get_total_safety(s::AbstractVector)
     probas[isnan.(s) .| isinf.(s)] .= 1.
     return prod(probas)
 end
-
 
 
 struct Problem
