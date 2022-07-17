@@ -1,7 +1,3 @@
-using Plots, Plots.PlotMeasures
-include("./solve.jl")
-
-
 mutable struct Scenario
     n_players::Integer
     A::Array
@@ -16,10 +12,25 @@ mutable struct Scenario
     secondary_varying_param
 end
 
+function check_param_sizes(scenario::Scenario)
+    all(
+        (
+            x == scenario.varying_param
+            || x == scenario.secondary_varying_param
+            || size(getfield(scenario, x), 1) == scenario.n_players
+        )
+        for x in [:A, :α, :B, :β, :θ, :d, :r]
+    )
+end
+
 function Scenario(
-    n_players,
-    A, α, B, β, θ,
-    d, r;
+    ;
+    n_players = 2,
+    A = [10., 10.], α = [0.5, 0.5],
+    B = [10., 10.], β = [0.5, 0.5],
+    θ = [0.5, 0.5],
+    d = [0., 0.],
+    r = 0.01:0.01:0.1,
     w = 1., l = 0., a_w = 0., a_l = 0.,
     varying_param = :r,
     secondary_varying_param = nothing
@@ -30,6 +41,7 @@ function Scenario(
         d, r, CSF(w, l, a_w, a_l),
         varying_param, secondary_varying_param
     )
+    @assert check_param_sizes(scenario) "Your input params need to match the number of players"
     # expand varying params if necessary
     vparam = getfield(scenario, varying_param)
     if size(vparam, 2) == 1
@@ -126,12 +138,12 @@ function get_values_for_scatterplot(results::Vector{SolverResult}, xaxis; take_a
         results = [r for r in results if r.success]
     end
     if take_avg
-        Xs = vcat((mean(r.Xs, dim = 1) for r in results)...)
-        Xp = vcat((mean(r.Xp, dim = 1) for r in results)...)
-        s = vcat((mean(r.s, dim = 1) for r in results)...)
-        p = vcat((mean(r.p, dim = 1) for r in results)...)
-        payoffs = vcat((mean(r.payoffs, dim = 1) for r in results)...)
-        total_safety = vcat((mean(get_total_safety(r.s), dim = 1) for r in results)...)
+        Xs = vcat((mean(r.Xs, 1) for r in results)...)
+        Xp = vcat((mean(r.Xp, 1) for r in results)...)
+        s = vcat((mean(r.s, 1) for r in results)...)
+        p = vcat((mean(r.p, 1) for r in results)...)
+        payoffs = vcat((mean(r.payoffs, 1) for r in results)...)
+        total_safety = vcat((mean(get_total_safety(r.s), 1) for r in results)...)
         return xaxis, Xs, Xp, s, p, total_safety, payoffs
     else
         xaxis_ = vcat((fill(x, size(r.Xs, 1)) for (x, r) in zip(xaxis, results))...)
@@ -254,7 +266,7 @@ end
 function _plot_helper_same(xaxis, Xs, Xp, s, p, total_safety, payoffs, xlabel, labels)
     n_steps_secondary = size(s)[1]
     colors = get_colors(n_steps_secondary)
-    combine_values(x) = mean(x, dim=2)
+    combine_values(x) = mean(x, 2)
     (Xp_plt, Xs_plt, perf_plt, safety_plt, payoff_plt) = (
         plot(
             xaxis, combine_values(x[1, :, :]),
@@ -534,7 +546,7 @@ end
 
 function solve_with_secondary_variation(
     scenario::Scenario,
-    method,
+    method::Symbol,
     options
 )
     if method == :scatter || method == :mixed
@@ -549,7 +561,7 @@ function solve_with_secondary_variation(
         Threads.@threads for j in 1:n_steps_secondary
             prodFunc = ProdFunc(A[:, i, j], α[:, i, j], B[:, i, j], β[:, i, j], θ[:, i, j])
             problem = Problem(d[:, i, j], r[:, i, j],  prodFunc, scenario.csf)
-            results[j, i] = solve(problem, method, options)
+            results[j, i] = solve(problem, method::Symbol, options)
         end
     end
     if options.verbose
@@ -592,15 +604,11 @@ function get_params(scenario)
     return n_steps, A, α, B, β, θ, d, r
 end
 
-function solve(
-    scenario::Scenario,
-    method = :iters,
-    options = SolverOptions()
-)
+function solve(scenario::Scenario, method::Symbol, options)
     if !isnothing(scenario.secondary_varying_param)
         return solve_with_secondary_variation(
             scenario,
-            method,
+            method::Symbol,
             options
         )
     end
@@ -612,15 +620,15 @@ function solve(
     Threads.@threads for i in 1:n_steps
         prodFunc = ProdFunc(A[:, i], α[:, i], B[:, i], β[:, i], θ[:, i])
         problem = Problem(d[:, i], r[:, i],  prodFunc, scenario.csf)
-        results[i] = solve(problem, method, options)
+        results[i] = solve(problem, method::Symbol, options)
     end
 
     return ScenarioResult(scenario, results)
 end
 
-function solve(scenario::Scenario; method = :iters, kwargs...)
+function solve(scenario::Scenario; method::Symbol = :iters, kwargs...)
     options = SolverOptions(SolverOptions(); kwargs...)
-    return solve(scenario, method, options)
+    return solve(scenario, method::Symbol, options)
 end
 
 

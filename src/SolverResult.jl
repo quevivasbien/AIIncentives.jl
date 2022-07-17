@@ -1,5 +1,3 @@
-include("./Problem.jl")
-
 struct SolverResult
     success::Bool
     Xs::Array

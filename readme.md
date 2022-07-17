@@ -1,8 +1,8 @@
-# ai-julia
+# AIIncentives.jl
 
 ## What is this?
 
-The code in [this repository](https://github.com/quevivasbien/ai-julia) is meant to find Nash equilibria for the following model:
+The code in this repository is meant to find Nash equilibria for the following model:
 
 We assume that *n* players produce safety, *s*, and performance, *p*, as
 
@@ -27,23 +27,30 @@ subject to the other players' choices of *X<sub>s</sub>* and *X<sub>p</sub>*. He
 ## Getting started
 
 If you don't have Julia, download it from https://julialang.org/downloads/ and install. You'll then need to install the packages that this project uses, which with Julia is luckily quite simple: open a console window, type `julia` to enter an interactive Julia session, then run
-```julia
-using Pkg
-Pkg.add(["Optim", "NLSolve", "Plots"])
 ```
-You should then be able to use the code. From an interactive Julia session in the same directory as the code, run `include("scenarios.jl")` to import the project code.
+] add Optim, NLsolve, Plots
+```
+Those dependencies will now be installed, so you won't have to repeat that last step in the future.
+
+At this point, the easiest way to load the project code is to open a new Julia session in the project directory -- from your computer's terminal, navigate to the project directory and run `julia --project` then `using AIIncentives`:
+```bash
+~/path/to/AIIncentives$ julia --project
+
+julia> using AIIncentives
+```
+You will then be able to use the project code. If this is the first time you do this, there will be a bit of delay as it precompiles some of the code.
 
 You can then create and solve a scenario like
 ```julia
 scenario = Scenario(
-    2,  # n_players
-    [10., 10.],  # A
-    [0.5, 0.5],  # α
-    [10., 10.],  # B
-    [0.5, 0.5],  # β
-    [0.25, 0.25],  # θ
-    [1., 1.],  # d
-    linspace(0.01, 0.1, 20),  # r
+    n_players = 2,
+    A = [10., 10.],
+    α = [0.5, 0.5],
+    B = [10., 10.],
+    β = [0.5, 0.5],
+    θ = [0.25, 0.25],
+    d = [1., 1.],
+    r = linspace(0.01, 0.1, 20),
     varying_param = :r
 )
 
@@ -230,14 +237,14 @@ The `scenarios.jl` file includes some helpful tools for looking at cases where y
 The main type defined here is `Scenario`. You can create a scenario like
 ```julia
 scenario = Scenario(
-    2,  # n_players
-    [10., 10.],  # A
-    [0.5, 0.5],  # α
-    [10., 10.],  # B
-    [0.5, 0.5],  # β
-    [0.25, 0.25],  # θ
-    [1., 1.],  # d
-    range(0.01, 0.1, length = 20),  # r
+    n_players = 2,
+    A = [10., 10.],
+    α = [0.5, 0.5],
+    B = [10., 10.],
+    β = [0.5, 0.5],
+    θ = [0.25, 0.25],
+    d = [1., 1.],
+    r = range(0.01, 0.1, length = 20),
     varying_param = :r
 )
 ```
@@ -246,14 +253,14 @@ which defines a 2-player scenario where `r` varies over 20 values between 0.01 a
 If we want, we can include a second varying parameter, like so:
 ```julia
 scenario = Scenario(
-    2,  # n_players
-    [10., 10.],  # A
-    [0.5, 0.5],  # α
-    [10., 10.],  # B
-    [0.5, 0.5],  # β
-    range(0., 1., length = 4),  # θ
-    [1., 1.],  # d
-    range(0.01, 0.1, length = 20),  # r
+    n_players = 2,
+    A = [10., 10.],
+    α = [0.5, 0.5],
+    B = [10., 10.],
+    β = [0.5, 0.5],
+    θ = range(0., 1., length = 4),
+    d = [1., 1.],
+    r = range(0.01, 0.1, length = 20),
     varying_param = :r,
     secondary_varying_param = :θ
 )
@@ -301,3 +308,4 @@ plot_result(
 ## More about plotting
 
 To-do
+
