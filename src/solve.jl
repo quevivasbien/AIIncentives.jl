@@ -22,7 +22,7 @@ end
 
 # Some helper functions
 
-function mean(x; dim)
+function mean(x, dim)
     sum(x, dims = dim) ./ size(x, dim)
 end
 
@@ -400,7 +400,7 @@ function attempt_mixed(problem, options)
     )
         return SolverResult(
             problem, true,
-            vec(mean(mixed_sol.Xs, dim = 1)), vec(mean(mixed_sol.Xp, dim = 1)),
+            vec(mean(mixed_sol.Xs, 1)), vec(mean(mixed_sol.Xp, 1)),
             prune = false
         )
     elseif options.retries > 0
@@ -443,7 +443,7 @@ end
 
 
 # general purpose solver function
-function solve(problem::Problem, method = :iters, options = SolverOptions())
+function solve(problem::Problem, method::Symbol, options)
     solve_func = if method == :iters
         solve_iters
     elseif method == :roots
@@ -462,11 +462,11 @@ end
 
 function solve(
     problem::Problem;
-    method = :iters,
+    method::Symbol = :iters,
     kwargs...
 )
     options = SolverOptions(SolverOptions(); kwargs...)
-    return solve(problem, method, options)
+    return solve(problem, method::Symbol, options)
 end
 
 

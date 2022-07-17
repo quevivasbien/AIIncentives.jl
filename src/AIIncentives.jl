@@ -2,7 +2,7 @@ module AIIncentives
 
 using Optim, NLsolve
 using Plots, Plots.PlotMeasures
-using DataFrames
+# using DataFrames
 
 export solve,
     
@@ -12,7 +12,13 @@ export solve,
     SolverOptions,
     Scenario,
 
-    plot_result
+    plot_result,
+
+    f,
+    payoff,
+    all_payoffs,
+    reward,
+    all_rewards
 
 
 include("ProdFunc.jl")
@@ -21,6 +27,6 @@ include("Problem.jl")
 include("SolverResult.jl")
 include("solve.jl")
 include("scenarios.jl")
-include("make_grid.jl")
+# include("make_grid.jl")
 
 end
