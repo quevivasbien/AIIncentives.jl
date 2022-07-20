@@ -44,13 +44,13 @@ You can then create and solve a scenario like
 ```julia
 scenario = Scenario(
     n_players = 2,
-    A = [10., 10.],
-    α = [0.5, 0.5],
-    B = [10., 10.],
-    β = [0.5, 0.5],
-    θ = [0.25, 0.25],
-    d = [1., 1.],
-    r = linspace(0.01, 0.1, 20),
+    A = 10.,
+    α = 0.5,
+    B = 10.,
+    β = 0.5,
+    θ = 0.25, 
+    d = 1.,
+    r = range(0.01, 0.1, length = 20),
     varying_param = :r
 )
 
@@ -183,7 +183,7 @@ problem = Problem(
     csf  # a CSF
 )
 ```
-Note that the lengths of `d` and `r` must match and be equal to `n` and `prodFunc.n_players`.
+Note that the lengths of `d` and `r` must match and be equal to `n` and `prodFunc.n_players`. Again, you can also construct a `Problem` using keyword arguments.
 
 To calculate the payoffs for all the players, you can do
 ```julia
@@ -198,37 +198,38 @@ payoff_for_player_i = payoff(problem, i, Xs, Xp)
 
 ## Solvers
 
-The `solve.jl` file contains several methods for finding Nash equilibria for a given problem. Your default choice should probably be `solve_iters`, which finds pure strategy equilibria by iterating on each player's best responses: it starts with an arbitrary choice of *X<sub>s</sub>* and *X<sub>p</sub>* and at each iteration figures out the choice of strategy for each player that will maximize their payoff given the others' strategies. When the best-response strategies stop changing significantly at each iteration, we've reached a Nash equilibrium. You can use this method just as
-```julia
-solve_iters(problem)
-```
-where `problem` is a `Problem`, which will return a `SolverResult` object (basically just a container for the equilibrium values of safety, performance, and payoffs; the `SolverResult` also has a `success` field which indicates exactly what it says -- true iff the solver was successful).
+The `solve.jl` file contains several methods for finding Nash equilibria for a given problem. You can call all of these using the `solve` function, which takes a problem and optional keyword arguments and returns a `SolverResult` (which is basically just a container for the equilibrium values of safety, performance, and payoffs, plus an indicator for whether the solver converged successfully).
 
-You can also supply a `SolverOptions` object as a second argument, to modify some details of how the solver works. For example:
+By default, `solve(problem)` will find a pure strategy solution for `problem` using a method of iterating on players' best responses: it starts with an arbitrary choice of *X<sub>s</sub>* and *X<sub>p</sub>* and at each iteration figures out the choice of strategy for each player that will maximize their payoff given the others' strategies. When the best-response strategies stop changing significantly at each iteration, we've reached a Nash equilibrium. You can also explicitly specify that you want to use this method by calling:
 ```julia
-options = SolverOptions(
+solve(problem, method = :iters)
+```
+
+You can also supply keyword arguments to modify some details of the solver's behavior. For example:
+```julia
+solve(
+    problem,
+    method = :iters,
     tol = 1e-8,  # stop if max relative diff. between iterations is < 1e-8
     max_iters = 1_000,  # go up to 1k iterations
     verbose = true  # print updates while solving
 )
-
-solve_iters(problem, options)
 ```
+To see what options are available, take a look at the fields in the `SolverOptions` struct in `solve.jl`. (You should be able to access these using the command `fieldnames(AIIncentives.SolverOptions)`.)
 
-The other solvers available are `solve_roots`, `solve_hybrid`, `solve_scatter`, and `solve_mixed`.
+The other methods you can use are the following:
 
-`solve_roots` attempts to find pure strategy equilibria by solving the first order conditions. This is typically quite fast but fails more often than `solve_iters`, returning bogus results.
+* `method = :roots` attempts to find pure strategy equilibria by solving the first order conditions. This is typically quite fast but fails pretty often, returning bogus results.
 
-`solve_hybrid` starts by finding candidate solutions with `solve_roots`, then plugs them into `solve_iters` to check them. This is more reliable than `solve_roots`, but you should typically just use `solve_iters`.
+* `method = :scatter` runs the iterating method with multiple, randomly-selected, starting points. The returned `SolverResult` will contain the solutions from each of those starting points. (Ideally, the solutions should all be the same.) This is typically just helpful for figuring out if solutions are sensitive to the starting point.
 
-`solve_scatter` runs `solve_iters` with multiple, randomly-selected, starting points. The returned `SolverResult` will contain the solutions from each of those starting points. (Ideally, the solutions should all be the same.)
+* `method = :mixed` runs a variation of the iterating method that attempts to maximize the best responses over a *history* of strategies. If the size of that history is large enough and the solver is run for enough iterations, the result should be a sample from a mixed strategy Nash equilibrium. You can control the history size by setting the `n_points` keyword argument. For example,
+    ```julia
+    solve(problem, method = :mixed, n_points = 100)
+    ```
+    will return a sample of size 100 from a (proposed) mixed-strategy equilibrium for `problem`. Note that this method can be very slow, but this is the only method that can give you mixed-strategy solutions.
 
-`solve_hybrid` runs a variation of `solve_iters` that attempts to maximize the best responses over a *history* of strategies. If the size of that history is large enough and the solver is run for enough iterations, the result should be a sample from a mixed strategy Nash equilibrium. You can control the history size by setting `n_points` in a `SolverOptions` object you provide to the solver. For example,
-```julia
-options = SolverOptions(n_points = 100)
-solve_mixed(problem, options)
-```
-will return a sample of size 100 from a (proposed) mixed-strategy equilibrium for `problem`.
+* `method = :hybrid` starts by attempting to find a solution with the basic iterating method. If that fails, it will call `solve` again using `method = :mixed`; however, it will still only accept a pure-strategy solution -- this is helpful for finding some equilibria that the basic iterating method can't find. If this method fails, then it's likely that the only solutions are mixed-strategy equilibria.
 
 ## Scenarios
 
@@ -238,34 +239,50 @@ The main type defined here is `Scenario`. You can create a scenario like
 ```julia
 scenario = Scenario(
     n_players = 2,
-    A = [10., 10.],
-    α = [0.5, 0.5],
-    B = [10., 10.],
-    β = [0.5, 0.5],
-    θ = [0.25, 0.25],
-    d = [1., 1.],
+    A = 10.,
+    α = 0.5,
+    B = 10.,
+    β = 0.5,
+    θ = 0.25, 
+    d = 1.,
     r = range(0.01, 0.1, length = 20),
     varying_param = :r
 )
 ```
-which defines a 2-player scenario where `r` varies over 20 values between 0.01 and 0.1. Notice that we construct the scenario with all the variables we would normally provide to create a `ProdFunc` and `Problem`. Most of the arguments are vectors of equal length (equal to `n_players`), but the parameter we want to vary is not; that parameter must be an array with a column for each player and a row for each value we want to use. (You can also provide a single vector, in which case it will be assumed that you want to use the same values for all players.) We also need to specify which parameter we're varying with the `varying_param` keyword argument (if not included, the default is `:r`). 
+which defines a 2-player scenario where `r` varies over 20 values between 0.01 and 0.1. Notice that we construct the scenario with all the variables we would normally provide to create a `ProdFunc` and `Problem`. Most of the arguments are single values, but the parameter we want to vary is not; that parameter must be an array with a column for each player and a row for each value we want to use. (You can also provide a single vector, in which case it will be assumed that you want to use the same values for all players.) We also need to specify which parameter we're varying with the `varying_param` keyword argument (if not included, the default is `:r`). 
 
 If we want, we can include a second varying parameter, like so:
 ```julia
 scenario = Scenario(
     n_players = 2,
-    A = [10., 10.],
-    α = [0.5, 0.5],
-    B = [10., 10.],
-    β = [0.5, 0.5],
+    A = 10.,
+    α = 0.5,
+    B = 10.,
+    β = 0.5,
     θ = range(0., 1., length = 4),
-    d = [1., 1.],
+    d = 1.,
     r = range(0.01, 0.1, length = 20),
     varying_param = :r,
     secondary_varying_param = :θ
 )
 ```
 In this example, we look at the problem with every combination of the provided varying and secondary varying parameters. The only difference between the two is that when we plot the results, the varying parameter will vary along the x-axis, while the secondary varying parameter will vary in different series.
+
+In the scenarios we've seen so far, we've provided only single values to the non-varying parameters. If we want the players to have different parameters, we need to provide a vector (with length equal to `n_players`) instead. For example,
+```julia
+scenario = Scenario(
+    n_players = 2,
+    A = [10., 20.],
+    α = 0.5,
+    B = 10.,
+    β = 0.5,
+    θ = 0.25, 
+    d = 1.,
+    r = range(0.01, 0.1, length = 20),
+    varying_param = :r
+)
+```
+gives us a scenario where player 1 has A = 10, and player 2 has A = 20.
 
 To change the CSF used in a scenario, you can provide to the `Scenario` constructor keyword arguments for `w`, `l`, `a_w`, and `a_l`. (The defaults are 1 for `w` and 0 for the others.)
 
@@ -279,14 +296,15 @@ You can specify the method you want to use to solve with the `method` keyword ar
 ```julia
 results = solve(scenario, method = :mixed)
 ```
-The available options are `:iters`, `:roots`, `:hybrid`, `:scatter`, and `:mixed`. The default is `:iters`.
+The default method is `:iters`.
 
-You can also provide a `SolverOptions` object with the `options` keyword:
+Like with the `solve` function for problems, you can also supply extra options as keyword arguments:
 ```julia
 results = solve(
     scenario,
     method = :mixed, 
-    options = SolverOptions(n_points = 100, verbose = true)
+    n_points = 100,
+    verbose = true
 )
 ```
 

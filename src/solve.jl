@@ -6,7 +6,7 @@ Base.@kwdef struct SolverOptions{T <: AbstractFloat}
     iter_algo::Optim.AbstractOptimizer = NelderMead()
     iter_options::Optim.Options = Optim.Options(x_tol = 1e-8, iterations = 500)
     init_guess::T = 1.
-    n_points::Integer = 20
+    n_points::Integer = 4
     init_mu::T = 0.
     init_sigma::T = 1.
     verbose::Bool = false
@@ -421,7 +421,7 @@ end
 function solve_hybrid(
     problem::Problem,
     init_guess::Array,
-    options = SolverOptions(n_points = 2)
+    options = SolverOptions()
 )
     iter_sol = solve_iters(problem, init_guess, options)
     if iter_sol.success
