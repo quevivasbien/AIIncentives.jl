@@ -1,10 +1,10 @@
-struct SolverResult
+struct SolverResult{T <: AbstractFloat, N}
     success::Bool
-    Xs::Array
-    Xp::Array
-    s::Array
-    p::Array
-    payoffs::Array
+    Xs::Array{T, N}
+    Xp::Array{T, N}
+    s::Array{T, N}
+    p::Array{T, N}
+    payoffs::Array{T, N}
 end
 
 function trim_to_index(result::SolverResult, index)
@@ -18,10 +18,11 @@ function trim_to_index(result::SolverResult, index)
     )
 end
 
+function prune_duplicates(result::SolverResult{T, 1}; atol = 1e-6, rtol=5e-2) where T
+    return result
+end
+
 function prune_duplicates(result::SolverResult; atol = 1e-6, rtol=5e-2)
-    if ndims(result.Xs) < 2
-        return result
-    end
     dups = Vector{Integer}()
     unique = Vector{Integer}()
     n_results = size(result.Xs, 1)
@@ -77,7 +78,11 @@ function SolverResult(problem::Problem, success::Bool, Xs, Xp; fill = true, prun
     end
 end
 
-function make_3d(result::SolverResult, n)
+function make_2d(result::SolverResult{T, 2}) where T
+    return result
+end
+
+function make_2d(result::SolverResult, n)
     return SolverResult(
         result.success,
         reshape(result.Xs, :, n),

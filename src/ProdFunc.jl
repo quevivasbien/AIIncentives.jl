@@ -1,22 +1,35 @@
-struct ProdFunc
+struct ProdFunc{T <: Real}
     n::Integer
-    A::Vector
-    α::Vector
-    B::Vector
-    β::Vector
-    θ::Vector
+    A::Vector{T}
+    α::Vector{T}
+    B::Vector{T}
+    β::Vector{T}
+    θ::Vector{T}
 end
 
 ProdFunc(A, α, B, β, θ) = ProdFunc(length(A), A, α, B, β, θ)
 
-ProdFunc(
+function ProdFunc(
     ;
-    A = [10., 10.],
-    α = [0.5, 0.5],
-    B = [10., 10.],
-    β = [0.5, 0.5], 
-    θ = [0.5, 0.5]
-) = ProdFunc(2, A, α, B, β, θ)
+    n::Integer = 2,
+    A::Union{Real, AbstractVector} = 10.,
+    α::Union{Real, AbstractVector} = 0.5,
+    B::Union{Real, AbstractVector} = 10.,
+    β::Union{Real, AbstractVector} = 0.5, 
+    θ::Union{Real, AbstractVector} = 0.5
+)
+    @assert n >= 2 "n must be at least 2"
+    prodFunc = ProdFunc(
+        n,
+        as_Float64_Array(A, n),
+        as_Float64_Array(α, n),
+        as_Float64_Array(B, n),
+        as_Float64_Array(β, n),
+        as_Float64_Array(θ, n)
+    )
+    @assert all(length(getfield(prodFunc, x)) == n for x in [:A, :α, :B, :β, :θ]) "Your input params need to match the number of players"
+    return prodFunc
+end
 
 function f(prodFunc::ProdFunc, i::Integer, Xs::Number, Xp::Number)
     p = prodFunc.B[i] * Xp^prodFunc.β[i]

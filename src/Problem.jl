@@ -12,23 +12,36 @@ function get_total_safety(s::AbstractVector)
 end
 
 
-struct Problem
+struct Problem{T <: Real}
     n::Integer
-    d::Vector
-    r::Vector
-    prodFunc::ProdFunc
+    d::Vector{T}
+    r::Vector{T}
+    prodFunc::ProdFunc{T}
     csf::CSF
 end
 
 Problem(d, r, prodFunc, csf) = Problem(length(d), d, r, prodFunc, csf)
 
-Problem(
+function Problem(
     ;
-    d = [0., 0.],
-    r = [0.1, 0.1],
-    prodFunc = ProdFunc(),
-    csf = CSF()
-) = Problem(2, d, r, prodFunc, csf)
+    n::Integer = 2,
+    d::Union{Real, AbstractVector} = 0.,
+    r::Union{Real, AbstractVector} = 0.1,
+    prodFunc::ProdFunc{Float64} = ProdFunc(),
+    csf::CSF = CSF()
+)
+    @assert n >= 2 "n must be at least 2"
+    @assert n == prodFunc.n "n must match prodFunc.n"
+    problem = Problem(
+        n,
+        as_Float64_Array(d, n),
+        as_Float64_Array(r, n),
+        prodFunc,
+        csf
+    )
+    @assert all(length(getfield(problem, x)) == n for x in [:d, :r]) "Your input params need to match the number of players"
+    return problem
+end
 
 function payoff(problem::Problem, i::Integer, Xs::Vector, Xp::Vector)
     (s, p) = f(problem.prodFunc, Xs, Xp)

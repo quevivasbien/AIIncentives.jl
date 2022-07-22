@@ -1,8 +1,8 @@
 struct CSF
-    w::Number
-    l::Number
-    a_w::Number
-    a_l::Number
+    w::Real
+    l::Real
+    a_w::Real
+    a_l::Real
 end
 
 CSF(; w = 1., l = 0., a_w = 0., a_l = 0.) = CSF(w, l, a_w, a_l)

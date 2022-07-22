@@ -22,21 +22,26 @@ function get_values_for_plot(results::Vector{SolverResult}; exclude_failed = tru
     return Xs, Xp, s, p, total_safety, payoffs
 end
 
-function create_plot(results::Vector{SolverResult}, xaxis, xlabel, plotsize, labels, title, logscale; exclude_failed = true)
+function create_plots(results::Vector{SolverResult}, xaxis, xlabel, labels; exclude_failed = true)
     (Xs, Xp, s, p, total_safety, payoffs) = get_values_for_plot(results; exclude_failed)
     labels_ = reshape(labels, 1, :)
     Xp_plt = plot(xaxis, Xp, xlabel = xlabel, ylabel = "Xₚ", labels = labels_)
     Xs_plt = plot(xaxis, Xs, xlabel = xlabel, ylabel = "Xₛ", labels = labels_)
     perf_plt = plot(xaxis, p, xlabel = xlabel, ylabel = "performance", labels = labels_)
     safety_plt = plot(xaxis, s, xlabel = xlabel, ylabel = "safety", labels = labels_)
+    total_safety_plt = plot(xaxis, total_safety, xlabel = xlabel, ylabel = "σ", label = nothing)
+    payoff_plt = plot(xaxis, payoffs, xlabel = xlabel, ylabel = "payoff", labels = labels_)
+    return Xp_plt, Xs_plt, perf_plt, safety_plt, total_safety_plt, payoff_plt
+end
+
+function create_plot(results::Vector{SolverResult}, xaxis, xlabel, plotsize, labels, title, logscale; exclude_failed = true)
+    Xp_plt, Xs_plt, perf_plt, safety_plt, total_safety_plt, payoff_plt = create_plots(results, xaxis, xlabel, labels; exclude_failed)
     if logscale
         yaxis!(Xp_plt, :log10)
         yaxis!(Xs_plt, :log10)
         yaxis!(perf_plt, :log10)
         yaxis!(safety_plt, :log10)
     end
-    total_safety_plt = plot(xaxis, total_safety, xlabel = xlabel, ylabel = "σ", label = nothing)
-    payoff_plt = plot(xaxis, payoffs, xlabel = xlabel, ylabel = "payoff", labels = labels_)
     final_plot = plot(
         Xp_plt, Xs_plt,
         perf_plt, safety_plt,
@@ -78,11 +83,7 @@ function get_values_for_scatterplot(results::Vector{SolverResult}, xaxis; take_a
     end
 end
 
-function create_scatterplot(
-    results::Vector{SolverResult}, xaxis, xlabel,
-    plotsize, labels, title, logscale;
-    take_avg = false, exclude_failed = true
-)
+function create_scatterplots(results::Vector{SolverResult}, xaxis, xlabel, labels; take_avg = false, exclude_failed = true)
     (xaxis_, Xs, Xp, s, p, total_safety, payoffs) = get_values_for_scatterplot(
         results, xaxis, take_avg = take_avg, exclude_failed = exclude_failed
     )
@@ -91,14 +92,25 @@ function create_scatterplot(
     Xs_plt = scatter(xaxis_, Xs, xlabel = xlabel, ylabel = "Xₛ", labels = labels_)
     perf_plt = scatter(xaxis_, p, xlabel = xlabel, ylabel = "performance", labels = labels_)
     safety_plt = scatter(xaxis_, s, xlabel = xlabel, ylabel = "safety", labels = labels_)
+    total_safety_plt = scatter(xaxis_, total_safety, xlabel = xlabel, ylabel = "σ", label = nothing)
+    payoff_plt = scatter(xaxis_, payoffs, xlabel = xlabel, ylabel = "payoff", labels = labels_)
+    return Xp_plt, Xs_plt, perf_plt, safety_plt, total_safety_plt, payoff_plt
+end
+
+function create_scatterplot(
+    results::Vector{SolverResult}, xaxis, xlabel,
+    plotsize, labels, title, logscale;
+    take_avg = false, exclude_failed = true
+)
+    Xp_plt, Xs_plt, perf_plt, safety_plt, total_safety_plt, payoff_plt = create_scatterplots(
+        results, xaxis, xlabel, labels, take_avg = take_avg, exclude_failed = exclude_failed
+    )
     if logscale
         yaxis!(Xp_plt, :log10)
         yaxis!(Xs_plt, :log10)
         yaxis!(perf_plt, :log10)
         yaxis!(safety_plt, :log10)
     end
-    total_safety_plt = scatter(xaxis_, total_safety, xlabel = xlabel, ylabel = "σ", label = nothing)
-    payoff_plt = scatter(xaxis_, payoffs, xlabel = xlabel, ylabel = "payoff", labels = labels_)
     final_plot = plot(
         Xp_plt, Xs_plt,
         perf_plt, safety_plt,
@@ -274,15 +286,21 @@ function _plot_helper_het(xaxis, Xs, Xp, s, p, total_safety, payoffs, xlabel, la
     return Xp_plt, Xs_plt, perf_plt, safety_plt, total_safety_plt, payoff_plt
 end
 
-
-function create_plot(results::Array{SolverResult, 2}, xaxis, xlabel, plotsize, labels, title, logscale; exclude_failed = true)
+function create_plots(results::Array{SolverResult, 2}, xaxis, xlabel, labels; exclude_failed = true)
     (Xs, Xp, s, p, total_safety, payoffs) = get_values_for_plot(results, exclude_failed = exclude_failed)
     players_same = are_players_same(results)
-    (Xp_plt, Xs_plt, perf_plt, safety_plt, total_safety_plt, payoff_plt) = if players_same
+    return if players_same
         _plot_helper_same(xaxis, Xs, Xp, s, p, total_safety, payoffs, xlabel, labels)
     else
         _plot_helper_het(xaxis, Xs, Xp, s, p, total_safety, payoffs, xlabel, labels)
     end
+end
+
+
+function create_plot(results::Array{SolverResult, 2}, xaxis, xlabel, plotsize, labels, title, logscale; exclude_failed = true)
+    (Xp_plt, Xs_plt, perf_plt, safety_plt, total_safety_plt, payoff_plt) = create_plots(
+        results, xaxis, xlabel, labels, exclude_failed = exclude_failed
+    )
     if logscale
         yaxis!(Xp_plt, :log10)
         yaxis!(Xs_plt, :log10)
@@ -301,6 +319,59 @@ function create_plot(results::Array{SolverResult, 2}, xaxis, xlabel, plotsize, l
     return final_plot
 end
 
+function get_xaxis_for_result_plot(res::ScenarioResult)
+    varying_param = getfield(res.scenario, res.scenario.varying_param)
+    n_steps = size(varying_param, 1)
+    return if varying_param[:, 2] == varying_param[:, 1]
+        varying_param[:, 1]
+    else
+        1:n_steps
+    end
+end
+
+function get_labels_for_secondary_result_plot(res::ScenarioResult)
+    secondary_varying_param = getfield(res.scenario, res.scenario.secondary_varying_param)
+    n_steps_secondary = size(secondary_varying_param, 1)
+    return ["$(res.scenario.secondary_varying_param) = $(secondary_varying_param[i, :])" for i in 1:n_steps_secondary]
+end
+
+function get_plots_for_result(
+    res::ScenarioResult;
+    take_avg = false,
+    exclude_failed = true
+)
+    xaxis = get_xaxis_for_result_plot(res)
+    return if isnothing(res.scenario.secondary_varying_param)
+        labels = ["player $i" for i in 1:res.scenario.n_players]
+        if ndims(res.solverResults[1].Xs) > 1
+            create_scatterplots(
+                res.solverResults,
+                xaxis,
+                res.scenario.varying_param,
+                labels,
+                take_avg = take_avg,
+                exclude_failed = exclude_failed
+            )
+        else
+            create_plots(
+                res.solverResults,
+                xaxis,
+                res.scenario.varying_param,
+                labels,
+                exclude_failed = exclude_failed
+            )
+        end
+    else
+        labels = get_labels_for_secondary_result_plot(res)
+        create_plots(
+            res.solverResults,
+            xaxis,
+            res.scenario.varying_param,
+            labels,
+            exclude_failed = exclude_failed
+        )
+    end
+end
 
 function plot_result(
     res::ScenarioResult;
@@ -310,14 +381,8 @@ function plot_result(
     take_avg = false,
     exclude_failed = true
 )
-    varying_param = getfield(res.scenario, res.scenario.varying_param)
-    n_steps = size(varying_param, 1)
-    xaxis = if varying_param[:, 2] == varying_param[:, 1]
-        varying_param[:, 1]
-    else
-        1:n_steps
-    end
-    plt = if isnothing(res.scenario.secondary_varying_param)
+    xaxis = get_xaxis_for_result_plot(res)
+    return if isnothing(res.scenario.secondary_varying_param)
         labels = ["player $i" for i in 1:res.scenario.n_players]
         if ndims(res.solverResults[1].Xs) > 1
             create_scatterplot(
@@ -344,9 +409,7 @@ function plot_result(
             )
         end
     else
-        secondary_varying_param = getfield(res.scenario, res.scenario.secondary_varying_param)
-        n_steps_secondary = size(secondary_varying_param, 1)
-        labels = ["$(res.scenario.secondary_varying_param) = $(secondary_varying_param[i, :])" for i in 1:n_steps_secondary]
+        labels = get_labels_for_secondary_result_plot(res)
         create_plot(
             res.solverResults,
             xaxis,
@@ -354,11 +417,10 @@ function plot_result(
             plotsize,
             labels,
             title,
-            logscale
+            logscale,
+            exclude_failed = exclude_failed
         )
     end
-
-    return plt
 end
 
 

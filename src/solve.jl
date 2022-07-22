@@ -20,29 +20,6 @@ function SolverOptions(options::SolverOptions; kwargs...)
     return SolverOptions(fields...)
 end
 
-# Some helper functions
-
-function mean(x, dim)
-    sum(x, dims = dim) ./ size(x, dim)
-end
-
-function mean(x)
-    sum(x) ./ length(x)
-end
-
-function slices_approx_equal(array, dim, atol, rtol)
-    all(
-        isapprox(
-            selectdim(array, dim, 1), selectdim(array, dim, i),
-            atol = atol, rtol = rtol
-        )
-        for i in 2:size(array, dim)
-    )
-end
-
-function is_napprox_greater(a, b; rtol = EPSILON)
-    a > b && !isapprox(a, b, rtol = rtol)
-end
 
 function verify(problem, strat, options)
     Xs = strat[:, 1]
@@ -255,7 +232,7 @@ function solve_scatter(
         println("None of the solver iterations converged.")
         return get_null_result(problem.n)
     end
-    combined_sols = sum([make_3d(r, problem.n) for r in results])
+    combined_sols = sum([make_2d(r, problem.n) for r in results])
     return combined_sols
 end
 
@@ -379,7 +356,7 @@ function solve_mixed(
         end
     end
     result = sum(
-        make_3d(
+        make_2d(
             SolverResult(problem, true, history[:, 1, i], history[:, 2, i], prune = false),
             problem.n
         )

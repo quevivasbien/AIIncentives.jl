@@ -1,22 +1,15 @@
-mutable struct Scenario
+mutable struct Scenario{T}
     n_players::Integer
-    A::Array
-    α::Array
-    B::Array
-    β::Array
-    θ::Array
-    d::Array
-    r::Array
+    A::Array{T}
+    α::Array{T}
+    B::Array{T}
+    β::Array{T}
+    θ::Array{T}
+    d::Array{T}
+    r::Array{T}
     csf::CSF
     varying_param::Symbol
     secondary_varying_param::Union{Symbol, Nothing}
-end
-
-function asarray(x::Union{Real, AbstractArray}, n::Integer)
-    if isa(x, AbstractArray)
-        return x
-    end
-    return fill(x, n)
 end
 
 function check_param_sizes(scenario::Scenario)
@@ -44,10 +37,10 @@ function Scenario(
 )
     scenario = Scenario(
         n_players,
-        asarray(A, n_players), asarray(α, n_players),
-        asarray(B, n_players), asarray(β, n_players),
-        asarray(θ, n_players),
-        asarray(d, n_players), asarray(r, n_players), CSF(w, l, a_w, a_l),
+        as_Float64_Array(A, n_players), as_Float64_Array(α, n_players),
+        as_Float64_Array(B, n_players), as_Float64_Array(β, n_players),
+        as_Float64_Array(θ, n_players),
+        as_Float64_Array(d, n_players), as_Float64_Array(r, n_players), CSF(w, l, a_w, a_l),
         varying_param, secondary_varying_param
     )
     @assert check_param_sizes(scenario) "Your input params need to match the number of players"
