@@ -221,7 +221,7 @@ function solve_scatter(
     Threads.@threads for i in 1:options.n_points
         result = solve_iters(
             problem,
-            init_points[i, :, :];
+            init_points[i, :, :],
             options
         )
         if result.success

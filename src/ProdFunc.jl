@@ -7,8 +7,6 @@ struct ProdFunc{T <: Real}
     θ::Vector{T}
 end
 
-ProdFunc(A, α, B, β, θ) = ProdFunc(length(A), A, α, B, β, θ)
-
 function ProdFunc(
     ;
     n::Integer = 2,
@@ -30,6 +28,9 @@ function ProdFunc(
     @assert all(length(getfield(prodFunc, x)) == n for x in [:A, :α, :B, :β, :θ]) "Your input params need to match the number of players"
     return prodFunc
 end
+
+ProdFunc(A, α, B, β, θ) = ProdFunc(n=length(A), A=A, α=α, B=B, β=β, θ=θ)
+
 
 function f(prodFunc::ProdFunc, i::Integer, Xs::Number, Xp::Number)
     p = prodFunc.B[i] * Xp^prodFunc.β[i]

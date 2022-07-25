@@ -56,6 +56,7 @@ scenario = Scenario(
 
 solution = solve(scenario)
 ```
+(Side note: to use math-related characters in most Julia code, you can typically just type the Latex code then press Tab. For example, `\alpha` + `[Tab]` becomes `α`.)
 
 This will find Nash equilibria over the given parameterization and range of values for `r`. To generate a plot of the result, you can execute
 ```julia
@@ -63,6 +64,8 @@ plot_result(solution)
 ```
 
 The first time you run something in the Julia session, it will take a while, since Julia compiles your code the first time you run it in a new setting. It should run a lot faster after that. Because of this, I recommend working within a Julia REPL session or a Jupyter notebook.
+
+If you just want to solve and plot scenarios where some parameter value changes, you can skip now to the section on the `Scenario` type. Otherwise, keep reading in a linear fashion.
 
 ## Base types
 
@@ -78,17 +81,18 @@ The `ProdFunc.jl` file implements a `ProdFunc` (production function) type that c
 describing how the inputs *X<sub>s</sub>* and *X<sub>p</sub>* produce safety and performance for all players. You can create an instance of the `ProdFunc` type like
 ```julia
 prodFunc = ProdFunc(
-    2,  # n_players
-    [10., 10.],  # A
-    [0.5, 0.5],  # α
-    [10., 10.],  # B
-    [0.5, 0.5],  # β
-    [0.25, 0.25]  # θ
+    n_players = 2,
+    A = 10.,
+    α = 0.5,
+    B = 10.,
+    β = 0.5,
+    θ = 0.25
 )
 ```
-You don't need to include the `n_players` parameter, but either way the other parameters need to all be vectors of equal length (equal to `n_players`). You can also provide all parameters as keyword arguments, in which case any excluded parameters will be set to default values; e.g., the following is equivalent to the above:
+If you want to supply different parameters for each player or just like typing more stuff out, you can also supply the parameters as vectors of equal length (equal to `n_players`). The following creates the same object as the example above:
 ```julia
 prodFunc = ProdFunc(
+    n_players = 2,
     A = [10., 10.],
     α = [0.5, 0.5],
     B = [10., 10.],
@@ -96,7 +100,7 @@ prodFunc = ProdFunc(
     θ = [0.25, 0.25]
 )
 ```
-(Side note: to use math-related characters in most Julia code, you can typically just type the Latex code then press Tab. For example, `\alpha` + `[Tab]` becomes `α`.)
+If you omit a keyword argument, it will be set at a default value.
 
 To determine the outputs for all players, you can do
 ```julia
@@ -176,14 +180,14 @@ The `Problem.jl` file implements a `Problem` type that represents the payoff fun
 You can construct a `Problem` like this:
 ```julia
 problem = Problem(
-    2,  # n (number of players, optional)
-    [1., 1.],  # d (disaster cost)
-    [0.05, 0.05],  # r (rental cost)
-    prodFunc,  # a ProdFunc
-    csf  # a CSF
+    n_players = 2,
+    d = 1.,
+    r = 0.05,
+    prodFunc = yourProdFunc,
+    csf = yourCSF
 )
 ```
-Note that the lengths of `d` and `r` must match and be equal to `n` and `prodFunc.n_players`. Again, you can also construct a `Problem` using keyword arguments.
+Note that the lengths of `d` and `r` must match and be equal to `n` and `prodFunc.n_players`. Again, you can omit arguments to use default values or provide vectors instead of scalars if you want different values for each player.
 
 To calculate the payoffs for all the players, you can do
 ```julia
