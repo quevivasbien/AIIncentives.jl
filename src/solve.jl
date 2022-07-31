@@ -12,7 +12,7 @@ Base.@kwdef struct SolverOptions{T <: AbstractFloat}
     verbose::Bool = false
     verify::Bool = true
     verify_mult::T = 1.1
-    retries::Integer = 0
+    retries::Integer = 10
 end
 
 function SolverOptions(options::SolverOptions; kwargs...)
