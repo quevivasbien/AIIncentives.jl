@@ -28,3 +28,9 @@ end
 function is_napprox_greater(a, b; rtol = EPSILON)
     a > b && !isapprox(a, b, rtol = rtol)
 end
+
+function get_probas(s::AbstractVector{T}) where {T <: Real}
+    probas = s ./ (1. .+ s)
+    probas[isnan.(s) .| isinf.(s)] .= 1.
+    return probas
+end

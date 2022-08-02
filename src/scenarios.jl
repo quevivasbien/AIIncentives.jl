@@ -7,6 +7,7 @@ mutable struct Scenario{T}
     θ::Array{T}
     d::Array{T}
     r::Array{T}
+    riskFunc::RiskFunc
     csf::CSF
     varying_param::Symbol
     secondary_varying_param::Union{Symbol, Nothing}
@@ -31,7 +32,8 @@ function Scenario(
     θ::Union{Real, AbstractArray} = 0.5,
     d::Union{Real, AbstractArray} = 0.,
     r::Union{Real, AbstractArray} = 0.01:0.01:0.1,
-    w::Real = 1., l::Real = 0., a_w::Real = 0., a_l::Real = 0.,
+    riskFunc::Union{RiskFunc, Nothing} = nothing,
+    csf::CSF = CSF(),
     varying_param::Symbol = :r,
     secondary_varying_param::Union{Symbol, Nothing} = nothing
 )
@@ -40,7 +42,9 @@ function Scenario(
         as_Float64_Array(A, n_players), as_Float64_Array(α, n_players),
         as_Float64_Array(B, n_players), as_Float64_Array(β, n_players),
         as_Float64_Array(θ, n_players),
-        as_Float64_Array(d, n_players), as_Float64_Array(r, n_players), CSF(w, l, a_w, a_l),
+        as_Float64_Array(d, n_players), as_Float64_Array(r, n_players),
+        isnothing(riskFunc) ? MultiplicativeRiskFunc(n_players) : riskFunc,
+        csf,
         varying_param, secondary_varying_param
     )
     @assert check_param_sizes(scenario) "Your input params need to match the number of players"
@@ -65,13 +69,13 @@ function Scenario(
 end
 
 
-struct ScenarioResult
+struct ScenarioResult{T <: Union{SolverResult, Vector{SolverResult}}, N}
     scenario::Scenario
-    solverResults::Array{SolverResult}
+    solverResults::Array{T, N}
 end
 
-function extract(res::ScenarioResult, field::Symbol)
-    if field in (:success, :Xs, :Xp, :s, :p, :payoffs)
+function extract(res::ScenarioResult{SolverResult, 1}, field::Symbol)
+    if field in (:success, :Xs, :Xp, :s, :p, :σ, :payoffs)
         [getfield(x, field) for x in res.solverResults]
     else
         getfield(res.scenario, field)
@@ -97,6 +101,7 @@ function get_problem_from_scenario(scenario::Scenario, index)
             B[:, index...], β[:, index...],
             θ[:, index...]
         ),
+        scenario.riskFunc,
         scenario.csf
     )
 end
@@ -152,12 +157,16 @@ function solve_with_secondary_variation(
     
     ((n_steps, n_steps_secondary), A, α, B, β, θ, d, r) = get_params_with_secondary_variation(scenario)
 
-    results = Array{SolverResult}(undef, (n_steps_secondary, n_steps))
+    results = if method in (:scatter, :mixed)
+        Array{Vector{SolverResult}}(undef, (n_steps_secondary, n_steps))
+    else
+        Array{SolverResult}(undef, (n_steps_secondary, n_steps))
+    end
     Threads.@threads for i in 1:n_steps
         Threads.@threads for j in 1:n_steps_secondary
             prodFunc = ProdFunc(A[:, i, j], α[:, i, j], B[:, i, j], β[:, i, j], θ[:, i, j])
-            problem = Problem(d[:, i, j], r[:, i, j],  prodFunc, scenario.csf)
-            results[j, i] = solve(problem, method::Symbol, options)
+            problem = Problem(scenario.n_players, d[:, i, j], r[:, i, j], prodFunc, scenario.riskFunc, scenario.csf)
+            results[j, i] = solve(problem, method, options)
         end
     end
     if options.verbose
@@ -204,19 +213,23 @@ function solve(scenario::Scenario, method::Symbol, options)
     if !isnothing(scenario.secondary_varying_param)
         return solve_with_secondary_variation(
             scenario,
-            method::Symbol,
+            method,
             options
         )
     end
 
     (n_steps, A, α, B, β, θ, d, r) = get_params(scenario)
 
-    results = Array{SolverResult}(undef, n_steps)
+    results = if method in (:mixed, :scatter)
+        Array{Vector{SolverResult}}(undef, n_steps)
+    else
+        Array{SolverResult}(undef, n_steps)
+    end
     # send to solver
     Threads.@threads for i in 1:n_steps
         prodFunc = ProdFunc(A[:, i], α[:, i], B[:, i], β[:, i], θ[:, i])
-        problem = Problem(d[:, i], r[:, i],  prodFunc, scenario.csf)
-        results[i] = solve(problem, method::Symbol, options)
+        problem = Problem(scenario.n_players, d[:, i], r[:, i], prodFunc, scenario.riskFunc, scenario.csf)
+        results[i] = solve(problem, method, options)
     end
 
     return ScenarioResult(scenario, results)

@@ -8,6 +8,9 @@ export
     solve,
     
     ProdFunc,
+    MultiplicativeRiskFunc,
+    AdditiveRiskFunc,
+    WinnerOnlyRiskFunc,
     CSF,
     Problem,
     SolverOptions,
@@ -29,6 +32,7 @@ export
 include("utils.jl")
 include("ProdFunc.jl")
 include("CSF.jl")
+include("RiskFunc.jl")
 include("Problem.jl")
 include("SolverResult.jl")
 include("solve.jl")

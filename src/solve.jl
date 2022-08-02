@@ -174,7 +174,7 @@ function attempt_zero_solution(problem, options)
     end
     converged, strat = suggest_iter_strat(problem, fill(0., problem.n, 2), options)
     success = converged && (!options.verify || verify(problem, strat, options))
-    return SolverResult(problem, success, strat[:, 1], strat[:, 2], prune = false)
+    return SolverResult(problem, success, strat[:, 1], strat[:, 2])
 end
 
 function solve_iters(
@@ -185,7 +185,7 @@ function solve_iters(
     converged, strat = suggest_iter_strat(problem, init_guess, options)
     success = converged && (!options.verify || verify(problem, strat, options))
     if success
-        return SolverResult(problem, true, strat[:, 1], strat[:, 2], prune = false)
+        return SolverResult(problem, true, strat[:, 1], strat[:, 2])
     elseif options.retries > 0
         if options.verbose
             println("Retrying...")
@@ -230,10 +230,9 @@ function solve_scatter(
     end
     if length(results) == 0
         println("None of the solver iterations converged.")
-        return get_null_result(problem.n)
+        return [get_null_result(problem.n)]
     end
-    combined_sols = sum([make_2d(r, problem.n) for r in results])
-    return combined_sols
+    return results
 end
 
 
@@ -243,8 +242,7 @@ function solve_roots(
     problem::Problem,
     options = SolverOptions();
     f_tol = 1e-8,
-    init_guesses::Vector{Float64} = [10.0^(3*i) for i in -2:2],
-    resolve_multiple = true
+    init_guesses::Vector{Float64} = [10.0^(3*i) for i in -2:2]
 )
     jac! = get_jac(problem, inplace = true)
     function obj!(val, x)
@@ -276,12 +274,11 @@ function solve_roots(
         return get_null_result(problem.n)
     end
     results = results[successes, :, :]
-    solverResult = SolverResult(problem, true, results[:, :, 1], results[:, :, 2])
-    if resolve_multiple
-        return resolve_multiple_solutions(solverResult, problem)
-    else
-        return solverResult
-    end
+    solverResults = [
+        SolverResult(problem, true, results[i, :, 1], results[i, :, 2])
+        for i in axes(results, 1)
+    ]
+    return resolve_multiple_solutions(solverResults, problem)
 end
 
 
@@ -289,7 +286,7 @@ end
 # Runs iterating solver over history of run
 
 function single_mixed_iter_for_i(problem, history, i, init_guess, options = SolverOptions())
-    objs = [get_func(problem, i, history[:, :, j]) for j in 1:size(history, 3)]
+    objs = [get_func(problem, i, history[:, :, j]) for j in axes(history, 3)]
     obj_(x) = sum(obj(exp.(x)) for obj in objs)
     # jacs = [get_jac(problem, i, history[:, :, j], inplace = false) for j in size(history, 3)]
     # jac_!(var, x) = copy!(var, sum(jac(exp.(x)) for jac in jacs))
@@ -355,14 +352,11 @@ function solve_mixed(
             break
         end
     end
-    result = sum(
-        make_2d(
-            SolverResult(problem, true, history[:, 1, i], history[:, 2, i], prune = false),
-            problem.n
-        )
+    results = [
+        SolverResult(problem, true, history[:, 1, i], history[:, 2, i])
         for i in 1:options.n_points
-    )
-    return result
+    ]
+    return results
 end
 
 
@@ -375,11 +369,9 @@ function attempt_mixed(problem, options)
         && slices_approx_equal(log.(mixed_sol.Xs), 1, EPSILON, sqrt(options.tol))
         && slices_approx_equal(log.(mixed_sol.Xp), 1, EPSILON, sqrt(options.tol))
     )
-        return SolverResult(
-            problem, true,
-            vec(mean(mixed_sol.Xs, 1)), vec(mean(mixed_sol.Xp, 1)),
-            prune = false
-        )
+        Xs = mean(hcat((sol.Xs for sol in mixed_sol)...), 1)
+        Xp = mean(hcat(sol.Xp for sol in mixed_sol)..., 1)
+        return SolverResult(problem, true, Xs, Xp)
     elseif options.retries > 0
         if options.verbose
             println("solve_mixed failed. Retrying...")
@@ -450,8 +442,9 @@ end
 function test_solve()
     println("Running test on `solve.jl`...")
     prodFunc = ProdFunc([10., 10.], [0.5, 0.5], [10., 10.], [0.5, 0.5], [0.25, 0.25])
+    riskFunc = MultiplicativeRiskFunc(2)
     csf = CSF(1., 0., 0., 0.)
-    problem = Problem([1., 1.], [0.01, 0.01], prodFunc, csf)
+    problem = Problem(2, [1., 1.], [0.01, 0.01], riskFunc, prodFunc, csf)
     options = SolverOptions(verbose = true)
     println("With `solve_iters`:")
     @time solve_iters_sol = solve_iters(problem, options)

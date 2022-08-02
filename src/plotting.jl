@@ -16,7 +16,7 @@ function get_values_for_plot(results::Vector{SolverResult}; exclude_failed = tru
             s[i, :] = r.s
             p[i, :] = r.p
             payoffs[i, :] = r.payoffs
-            total_safety[i] = get_total_safety(r.s)
+            total_safety[i] = r.σ
         end
     end
     return Xs, Xp, s, p, total_safety, payoffs
@@ -58,32 +58,32 @@ end
 
 # functions for plotting with single varying param, scatterplot instead of line plot (for when multiple solutions are found)
 
-function get_values_for_scatterplot(results::Vector{SolverResult}, xaxis; take_avg = false, exclude_failed = true)
+function get_values_for_scatterplot(results::Vector{Vector{SolverResult}}, xaxis; take_avg = false, exclude_failed = true)
     if exclude_failed
-        xaxis = [x for (x, r) in zip(xaxis, results) if r.success]
-        results = [r for r in results if r.success]
+        xaxis = [[x for (x, s) in zip(xaxis, r) if s.success] for r in results]
+        results = [[s for s in r if s.success] for r in results]
     end
     if take_avg
-        Xs = vcat((mean(r.Xs, 1) for r in results)...)
-        Xp = vcat((mean(r.Xp, 1) for r in results)...)
-        s = vcat((mean(r.s, 1) for r in results)...)
-        p = vcat((mean(r.p, 1) for r in results)...)
-        payoffs = vcat((mean(r.payoffs, 1) for r in results)...)
-        total_safety = vcat((mean(get_total_safety(r.s), 1) for r in results)...)
+        Xs = vcat((mean(hcat((s.Xs for s in r)...), 1) for r in results)...)
+        Xp = vcat((mean(hcat((s.Xp for s in r)...), 1) for r in results)...)
+        s = vcat((mean(hcat((s.s for s in r)...), 1) for r in results)...)
+        p = vcat((mean(hcat((s.p for s in r)...), 1) for r in results)...)
+        payoffs = vcat((mean(hcat((s.payoffs for s in r)...), 1) for r in results)...)
+        total_safety = [mean([s.σ for s in r]) for r in results]
         return xaxis, Xs, Xp, s, p, total_safety, payoffs
     else
-        xaxis_ = vcat((fill(x, size(r.Xs, 1)) for (x, r) in zip(xaxis, results))...)
-        Xs = vcat((r.Xs for r in results)...)
-        Xp = vcat((r.Xp for r in results)...)
-        s = vcat((r.s for r in results)...)
-        p = vcat((r.p for r in results)...)
-        payoffs = vcat((r.payoffs for r in results)...)
-        total_safety = get_total_safety(s)
+        xaxis_ = vcat((fill(x, length(r)) for (x, r) in zip(xaxis, results))...)
+        Xs = vcat((s.Xs for r in results for s in r)...)
+        Xp = vcat((s.Xp for r in results for s in r)...)
+        s = vcat((s.s for r in results for s in r)...)
+        p = vcat((s.p for r in results for s in r)...)
+        payoffs = vcat((s.payoffs for r in results for s in r)...)
+        total_safety = [s.σ for r in results for s in r]
         return xaxis_, Xs, Xp, s, p, total_safety, payoffs        
     end
 end
 
-function create_scatterplots(results::Vector{SolverResult}, xaxis, xlabel, labels; take_avg = false, exclude_failed = true)
+function create_scatterplots(results::Vector{Vector{SolverResult}}, xaxis, xlabel, labels; take_avg = false, exclude_failed = true)
     (xaxis_, Xs, Xp, s, p, total_safety, payoffs) = get_values_for_scatterplot(
         results, xaxis, take_avg = take_avg, exclude_failed = exclude_failed
     )
@@ -98,7 +98,7 @@ function create_scatterplots(results::Vector{SolverResult}, xaxis, xlabel, label
 end
 
 function create_scatterplot(
-    results::Vector{SolverResult}, xaxis, xlabel,
+    results::Vector{Vector{SolverResult}}, xaxis, xlabel,
     plotsize, labels, title, logscale;
     take_avg = false, exclude_failed = true
 )
@@ -170,7 +170,7 @@ function get_values_for_plot(results::Array{SolverResult, 2}; exclude_failed = t
             s[i, j, :] = results[i, j].s
             p[i, j, :] = results[i, j].p
             payoffs[i, j, :] = results[i, j].payoffs
-            total_safety[i, j] = get_total_safety(results[i, j].s)
+            total_safety[i, j] = results[i, j].σ
         end
     end
     return Xs, Xp, s, p, total_safety, payoffs
@@ -336,45 +336,23 @@ function get_labels_for_secondary_result_plot(res::ScenarioResult)
 end
 
 function get_plots_for_result(
-    res::ScenarioResult;
+    res::ScenarioResult{SolverResult, 1};
     take_avg = false,
     exclude_failed = true
 )
     xaxis = get_xaxis_for_result_plot(res)
-    return if isnothing(res.scenario.secondary_varying_param)
-        labels = ["player $i" for i in 1:res.scenario.n_players]
-        if ndims(res.solverResults[1].Xs) > 1
-            create_scatterplots(
-                res.solverResults,
-                xaxis,
-                res.scenario.varying_param,
-                labels,
-                take_avg = take_avg,
-                exclude_failed = exclude_failed
-            )
-        else
-            create_plots(
-                res.solverResults,
-                xaxis,
-                res.scenario.varying_param,
-                labels,
-                exclude_failed = exclude_failed
-            )
-        end
-    else
-        labels = get_labels_for_secondary_result_plot(res)
-        create_plots(
-            res.solverResults,
-            xaxis,
-            res.scenario.varying_param,
-            labels,
-            exclude_failed = exclude_failed
-        )
-    end
+    labels = ["player $i" for i in 1:res.scenario.n_players]
+    create_plots(
+        res.solverResults,
+        xaxis,
+        res.scenario.varying_param,
+        labels,
+        exclude_failed = exclude_failed
+    )
 end
 
-function plot_result(
-    res::ScenarioResult;
+function get_plots_for_result(
+    res::ScenarioResult{SolverResult, 2};
     plotsize = (900, 900),
     title = nothing,
     logscale = false,
@@ -382,45 +360,101 @@ function plot_result(
     exclude_failed = true
 )
     xaxis = get_xaxis_for_result_plot(res)
-    return if isnothing(res.scenario.secondary_varying_param)
-        labels = ["player $i" for i in 1:res.scenario.n_players]
-        if ndims(res.solverResults[1].Xs) > 1
-            create_scatterplot(
-                res.solverResults,
-                xaxis,
-                res.scenario.varying_param,
-                plotsize, 
-                labels,
-                title,
-                logscale,
-                take_avg = take_avg,
-                exclude_failed = exclude_failed
-            )
-        else
-            create_plot(
-                res.solverResults,
-                xaxis,
-                res.scenario.varying_param,
-                plotsize,
-                labels,
-                title,
-                logscale,
-                exclude_failed = exclude_failed
-            )
-        end
-    else
-        labels = get_labels_for_secondary_result_plot(res)
-        create_plot(
-            res.solverResults,
-            xaxis,
-            res.scenario.varying_param,
-            plotsize,
-            labels,
-            title,
-            logscale,
-            exclude_failed = exclude_failed
-        )
-    end
+    labels = get_labels_for_secondary_result_plot(res)
+    create_plots(
+        res.solverResults,
+        xaxis,
+        res.scenario.varying_param,
+        labels,
+        exclude_failed = exclude_failed
+    )
+end
+
+function get_plots_for_result(
+    res::ScenarioResult{Vector{SolverResult}, 1};
+    plotsize = (900, 900),
+    title = nothing,
+    logscale = false,
+    take_avg = false,
+    exclude_failed = true
+)
+    xaxis = get_xaxis_for_result_plot(res)
+    labels = ["player $i" for i in 1:res.scenario.n_players]
+    create_scatterplots(
+        res.solverResults,
+        xaxis,
+        res.scenario.varying_param,
+        labels,
+        take_avg = take_avg,
+        exclude_failed = exclude_failed
+    )
+end
+
+function plot_result(
+    res::ScenarioResult{SolverResult, 1};
+    plotsize = (900, 900),
+    title = nothing,
+    logscale = false,
+    take_avg = false,
+    exclude_failed = true
+)
+    xaxis = get_xaxis_for_result_plot(res)
+    labels = ["player $i" for i in 1:res.scenario.n_players]
+    create_plot(
+        res.solverResults,
+        xaxis,
+        res.scenario.varying_param,
+        plotsize,
+        labels,
+        title,
+        logscale,
+        exclude_failed = exclude_failed
+    )
+end
+
+function plot_result(
+    res::ScenarioResult{SolverResult, 2};
+    plotsize = (900, 900),
+    title = nothing,
+    logscale = false,
+    take_avg = false,
+    exclude_failed = true
+)
+    xaxis = get_xaxis_for_result_plot(res)
+    labels = get_labels_for_secondary_result_plot(res)
+    create_plot(
+        res.solverResults,
+        xaxis,
+        res.scenario.varying_param,
+        plotsize,
+        labels,
+        title,
+        logscale,
+        exclude_failed = exclude_failed
+    )
+end
+
+function plot_result(
+    res::ScenarioResult{Vector{SolverResult}, 1};
+    plotsize = (900, 900),
+    title = nothing,
+    logscale = false,
+    take_avg = false,
+    exclude_failed = true
+)
+    xaxis = get_xaxis_for_result_plot(res)
+    labels = ["player $i" for i in 1:res.scenario.n_players]
+    create_scatterplot(
+        res.solverResults,
+        xaxis,
+        res.scenario.varying_param,
+        plotsize, 
+        labels,
+        title,
+        logscale,
+        take_avg = take_avg,
+        exclude_failed = exclude_failed
+    )
 end
 
 

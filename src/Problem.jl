@@ -1,32 +1,18 @@
-function get_total_safety(s::AbstractArray)
-    probas = s ./ (1. .+ s)
-    # if s is infinite, proba should be 1
-    probas[isnan.(s) .| isinf.(s)] .= 1.
-    return prod(probas, dims = ndims(s))
-end
-
-function get_total_safety(s::AbstractVector)
-    probas = s ./ (1. .+ s)
-    probas[isnan.(s) .| isinf.(s)] .= 1.
-    return prod(probas)
-end
-
-
 struct Problem{T <: Real}
     n::Integer
     d::Vector{T}
     r::Vector{T}
     prodFunc::ProdFunc{T}
+    riskFunc::RiskFunc
     csf::CSF
 end
-
-Problem(d, r, prodFunc, csf) = Problem(length(d), d, r, prodFunc, csf)
 
 function Problem(
     ;
     n::Integer = 2,
     d::Union{Real, AbstractVector} = 0.,
     r::Union{Real, AbstractVector} = 0.1,
+    RiskFunc::Union{RiskFunc, Nothing} = nothing,
     prodFunc::ProdFunc{Float64} = ProdFunc(),
     csf::CSF = CSF()
 )
@@ -37,6 +23,7 @@ function Problem(
         as_Float64_Array(d, n),
         as_Float64_Array(r, n),
         prodFunc,
+        isnothing(riskFunc) ? MultiplicativeRiskFunc(n) : riskFunc,
         csf
     )
     @assert all(length(getfield(problem, x)) == n for x in [:d, :r]) "Your input params need to match the number of players"
@@ -45,13 +32,13 @@ end
 
 function payoff(problem::Problem, i::Integer, Xs::Vector, Xp::Vector)
     (s, p) = f(problem.prodFunc, Xs, Xp)
-    σ = get_total_safety(s)
+    σ = get_total_safety(problem.riskFunc, s, p)
     return σ .* reward(problem.csf, i, p) .- (1. .- σ) .* problem.d[i] .- problem.r[i] .* (Xs[i] + Xp[i])
 end
 
 function payoff_deriv(problem::Problem, i::Integer, Xs::Vector, Xp::Vector)
     (s, p) = f(problem.prodFunc, Xs, Xp)
-    σ = get_total_safety(s)
+    σ = get_total_safety(problem.riskFunc, s, p)
     proba_mult = σ / (s[i] * (1. + s[i]))
     prod_jac = df_from_s_p(problem.prodFunc, i, s[i], p[i])  # a 2 x 2 array
     s_ks = prod_jac[1, 1]
@@ -67,7 +54,7 @@ function payoff_deriv(problem::Problem, i::Integer, Xs::Vector, Xp::Vector)
 end
 
 function all_payoffs_with_s_p(problem::Problem, Xs::Vector, Xp::Vector, s::Vector, p::Vector)
-    σ = get_total_safety(s)
+    σ = get_total_safety(problem.riskFunc, s, p)
     return σ .* all_rewards(problem.csf, p) .- (1. .- σ) .* problem.d .- problem.r .* (Xs .+ Xp)
 end
 
@@ -78,7 +65,7 @@ end
 
 function all_payoffs_deriv_flat(problem::Problem, Xs::Vector, Xp::Vector)
     (s, p) = f(problem.prodFunc, Xs, Xp)
-    σ = get_total_safety(s)
+    σ = get_total_safety(problem.riskFunc, s, p)
     proba_mult = σ ./ (s .* (1. .+ s))
     prod_jac = df(problem.prodFunc, Xs, Xp)  # an n x 2 x 2 array
     s_ks = prod_jac[:, 1, 1]
