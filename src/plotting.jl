@@ -335,32 +335,33 @@ function get_labels_for_secondary_result_plot(res::ScenarioResult)
     return ["$(res.scenario.secondary_varying_param) = $(secondary_varying_param[i, :])" for i in 1:n_steps_secondary]
 end
 
+# for results with no secondary variation and only one result per problem
 function get_plots_for_result(
     res::ScenarioResult{SolverResult, 1};
+    labels = nothing,
     take_avg = false,
     exclude_failed = true
 )
     xaxis = get_xaxis_for_result_plot(res)
-    labels = ["player $i" for i in 1:res.scenario.n_players]
+    labels = isnothing(labels) ? ["player $i" for i in 1:res.scenario.n_players] : labels
     create_plots(
         res.solverResults,
         xaxis,
         res.scenario.varying_param,
-        labels,
+        labels, 
         exclude_failed = exclude_failed
     )
 end
 
+# for scenarios with secondary variation
 function get_plots_for_result(
     res::ScenarioResult{SolverResult, 2};
-    plotsize = (900, 900),
-    title = nothing,
-    logscale = false,
+    labels = nothing,
     take_avg = false,
     exclude_failed = true
 )
     xaxis = get_xaxis_for_result_plot(res)
-    labels = get_labels_for_secondary_result_plot(res)
+    labels = isnothing(labels) ? get_labels_for_secondary_result_plot(res) : labels
     create_plots(
         res.solverResults,
         xaxis,
@@ -370,16 +371,15 @@ function get_plots_for_result(
     )
 end
 
+# for results with no secondary variation and multiple results per problem
 function get_plots_for_result(
     res::ScenarioResult{Vector{SolverResult}, 1};
-    plotsize = (900, 900),
-    title = nothing,
-    logscale = false,
+    labels = nothing,
     take_avg = false,
     exclude_failed = true
 )
     xaxis = get_xaxis_for_result_plot(res)
-    labels = ["player $i" for i in 1:res.scenario.n_players]
+    labels = isnothing(labels) ? ["player $i" for i in 1:res.scenario.n_players] : labels
     create_scatterplots(
         res.solverResults,
         xaxis,
@@ -390,16 +390,18 @@ function get_plots_for_result(
     )
 end
 
+# for results with no secondary variation and only one result per problem
 function plot_result(
     res::ScenarioResult{SolverResult, 1};
     plotsize = (900, 900),
     title = nothing,
+    labels = nothing,
     logscale = false,
     take_avg = false,
     exclude_failed = true
 )
     xaxis = get_xaxis_for_result_plot(res)
-    labels = ["player $i" for i in 1:res.scenario.n_players]
+    labels = isnothing(labels) ? ["player $i" for i in 1:res.scenario.n_players] : labels
     create_plot(
         res.solverResults,
         xaxis,
@@ -412,16 +414,18 @@ function plot_result(
     )
 end
 
+# for scenarios with secondary variation
 function plot_result(
     res::ScenarioResult{SolverResult, 2};
     plotsize = (900, 900),
     title = nothing,
+    labels = nothing,
     logscale = false,
     take_avg = false,
     exclude_failed = true
 )
     xaxis = get_xaxis_for_result_plot(res)
-    labels = get_labels_for_secondary_result_plot(res)
+    labels = isnothing(labels) ? get_labels_for_secondary_result_plot(res) : labels
     create_plot(
         res.solverResults,
         xaxis,
@@ -434,16 +438,18 @@ function plot_result(
     )
 end
 
+# for results with no secondary variation and only one result per problem
 function plot_result(
     res::ScenarioResult{Vector{SolverResult}, 1};
     plotsize = (900, 900),
     title = nothing,
+    labels = nothing,
     logscale = false,
     take_avg = false,
     exclude_failed = true
 )
     xaxis = get_xaxis_for_result_plot(res)
-    labels = ["player $i" for i in 1:res.scenario.n_players]
+    labels = isnothing(labels) ? ["player $i" for i in 1:res.scenario.n_players] : labels
     create_scatterplot(
         res.solverResults,
         xaxis,
