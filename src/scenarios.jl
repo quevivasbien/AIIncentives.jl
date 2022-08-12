@@ -150,10 +150,7 @@ function solve_with_secondary_variation(
     method::Symbol,
     options
 )
-    if method == :scatter || method == :mixed
-        println("Secondary variation is unsupported with the mixed or scatter solvers.")
-        return ScenarioResult(scenario, SolverResult[])
-    end
+    @assert method != :scatter && method != :mixed "Secondary variation is unsupported with the mixed or scatter solvers."
     
     ((n_steps, n_steps_secondary), A, α, B, β, θ, d, r) = get_params_with_secondary_variation(scenario)
 

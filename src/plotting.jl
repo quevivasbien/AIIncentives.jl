@@ -60,24 +60,27 @@ end
 
 function get_values_for_scatterplot(results::Vector{Vector{SolverResult}}, xaxis; take_avg = false, exclude_failed = true)
     if exclude_failed
-        xaxis = [[x for (x, s) in zip(xaxis, r) if s.success] for r in results]
+        xaxis = [fill(x, sum((r.success for r in s))) for (x, s) in zip(xaxis, results)]
         results = [[s for s in r if s.success] for r in results]
+    else
+        xaxis = [fill(x, length(s)) for (x, s) in zip(xaxis, results)]
     end
     if take_avg
-        Xs = vcat((mean(hcat((s.Xs for s in r)...), 1) for r in results)...)
-        Xp = vcat((mean(hcat((s.Xp for s in r)...), 1) for r in results)...)
-        s = vcat((mean(hcat((s.s for s in r)...), 1) for r in results)...)
-        p = vcat((mean(hcat((s.p for s in r)...), 1) for r in results)...)
-        payoffs = vcat((mean(hcat((s.payoffs for s in r)...), 1) for r in results)...)
+        xaxis_ = [mean(x) for x in xaxis]
+        Xs = hcat((mean(hcat((s.Xs for s in r)...), 2) for r in results)...) |> transpose
+        Xp = hcat((mean(hcat((s.Xp for s in r)...), 2) for r in results)...) |> transpose
+        s = hcat((mean(hcat((s.s for s in r)...), 2) for r in results)...) |> transpose
+        p = hcat((mean(hcat((s.p for s in r)...), 2) for r in results)...) |> transpose
+        payoffs = hcat((mean(hcat((s.payoffs for s in r)...), 2) for r in results)...) |> transpose
         total_safety = [mean([s.σ for s in r]) for r in results]
-        return xaxis, Xs, Xp, s, p, total_safety, payoffs
+        return xaxis_, Xs, Xp, s, p, total_safety, payoffs
     else
-        xaxis_ = vcat((fill(x, length(r)) for (x, r) in zip(xaxis, results))...)
-        Xs = vcat((s.Xs for r in results for s in r)...)
-        Xp = vcat((s.Xp for r in results for s in r)...)
-        s = vcat((s.s for r in results for s in r)...)
-        p = vcat((s.p for r in results for s in r)...)
-        payoffs = vcat((s.payoffs for r in results for s in r)...)
+        xaxis_ = vcat(xaxis...)
+        Xs = hcat((s.Xs for r in results for s in r)...) |> transpose
+        Xp = hcat((s.Xp for r in results for s in r)...) |> transpose
+        s = hcat((s.s for r in results for s in r)...) |> transpose
+        p = hcat((s.p for r in results for s in r)...) |> transpose
+        payoffs = hcat((s.payoffs for r in results for s in r)...) |> transpose
         total_safety = [s.σ for r in results for s in r]
         return xaxis_, Xs, Xp, s, p, total_safety, payoffs        
     end
