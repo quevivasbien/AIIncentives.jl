@@ -102,15 +102,6 @@ function single_iter_for_i(
 )
     obj = get_func(problem, i, strat)
     obj_(x) = obj(exp.(x))
-    # TODO: the gradients I was calculating were wrong!! Fix this or just leave them off I suppose
-    # jac = get_jac(problem, i, strat, inplace = false)
-    # jac_!(var, x) = copy!(var, exp.(x) .* jac(exp.(x)))
-    # if init_guess is zero-effort, try breaking out
-    if all(init_guess .== 0.)
-        init_guess = exp.(
-            (options.init_mu .+ options.init_sigma .* randn(2))
-        )
-    end
     try
         res = optimize(
             obj_,
@@ -119,12 +110,7 @@ function single_iter_for_i(
             options.iter_algo,
             options.iter_options
         )
-        # if θ == 0, need to check the zero-input payoff
-        if any(problem.prodFunc.θ .!= 0.) && obj([0., 0.]) > -Optim.minimum(res)
-            return [0., 0.]
-        else
-            return exp.(Optim.minimizer(res))
-        end
+        return exp.(Optim.minimizer(res))
     catch e
         if isa(e, InterruptException)
             throw(e)
@@ -168,15 +154,6 @@ function suggest_iter_strat(problem, init_guess, options)
     return false, strat
 end
 
-function attempt_zero_solution(problem, options)
-    if options.verbose
-        println("Attempting all-zero solution")
-    end
-    converged, strat = suggest_iter_strat(problem, fill(0., problem.n, 2), options)
-    success = converged && (!options.verify || verify(problem, strat, options))
-    return SolverResult(problem, success, strat[:, 1], strat[:, 2])
-end
-
 function solve_iters(
     problem::Problem,
     init_guess::Array,
@@ -184,9 +161,9 @@ function solve_iters(
 )
     converged, strat = suggest_iter_strat(problem, init_guess, options)
     success = converged && (!options.verify || verify(problem, strat, options))
-    if success
-        return SolverResult(problem, true, strat[:, 1], strat[:, 2])
-    elseif options.retries > 0
+    if success || options.retries == 0
+        return SolverResult(problem, success, strat[:, 1], strat[:, 2])
+    else
         if options.verbose
             println("Retrying...")
         end
@@ -195,8 +172,6 @@ function solve_iters(
             exp.(options.init_mu .+ options.init_sigma .* randn(problem.n, 2)),
             SolverOptions(options, retries = options.retries - 1)
         )
-    else
-        return attempt_zero_solution(problem, options)
     end
 end
 
