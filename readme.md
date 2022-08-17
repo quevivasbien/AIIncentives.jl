@@ -18,11 +18,11 @@ In a Nash equilibrium, each player *i* chooses *X<sub>s,i</sub>* and *X<sub>p,i<
 
 <div style="text-align: center">
 
-![\pi_i := \left( \prod_{j=1}^n \frac{s_j}{1+s_j} \right) \rho_i(p) - \left( 1 - \prod_{j=1}^n \frac{s_j}{1+s_j} \right) d_i - r_i(X_{i,s} + X_{i,p})](https://latex.codecogs.com/svg.image?\pi_i&space;:=&space;\left(&space;\prod_{j=1}^n&space;\frac{s_j}{1&plus;s_j}&space;\right)&space;\rho_i(p)&space;-&space;\left(&space;1&space;-&space;\prod_{j=1}^n&space;\frac{s_j}{1&plus;s_j}&space;\right)&space;d_i&space;-&space;r_i(X_{i,s}&space;&plus;&space;X_{i,p}) "formula for payoff")
+![u_i := \sigma(s, p) \rho_i(p) - \left( 1 - \sigma(s, p) \right) d_i - r_i(X_{i,s} + X_{i,p})](https://latex.codecogs.com/svg.image?u_i&space;:=&space;\sigma(s,&space;p)&space;\rho_i(p)&space;-&space;\left(&space;1&space;-&space;\sigma(s,&space;p)&space;\right)&space;d_i&space;-&space;r_i(X_{i,s}&space;&plus;&space;X_{i,p}) "formula for payoff")
 
 </div>
 
-subject to the other players' choices of *X<sub>s</sub>* and *X<sub>p</sub>*. Here *ρ<sub>i</sub>(p)* is a contest success function (the expected payoff for player *i* given a safe outcome and a vector of performances *p*), and *d<sub>i</sub>* is the damage incurred by player *i* in the event of an unsafe outcome.
+subject to the other players' choices of *X<sub>s</sub>* and *X<sub>p</sub>*. Here *σ* is a "risk function" that determines the probability of a safe outcome (no disaster), *ρ<sub>i</sub>* is a contest success function (the expected payoff for player *i* given a safe outcome and a vector of performances *p*), and *d<sub>i</sub>* is the damage incurred by player *i* in the event of a disaster.
 
 ## Getting started
 
@@ -32,12 +32,14 @@ If you don't have Julia, download it from https://julialang.org/downloads/ and i
 ```
 Those dependencies will now be installed, so you won't have to repeat that last step in the future.
 
-At this point, the easiest way to load the project code is to open a new Julia session in the project directory -- from your computer's terminal, navigate to the project directory and run `julia --project` then `using AIIncentives`:
+At this point, the easiest way to load the project code is to open a new Julia session in the project directory -- from your computer's terminal, navigate to the project directory and run:
 ```bash
-~/path/to/AIIncentives$ julia --project
+~/path/to/AIIncentives$ julia --project --threads=auto
 
 julia> using AIIncentives
 ```
+(The `--project` flag allows you to import the project with the `using` keyword, and the `--threads=auto` flag allows Julia to use all of your computer's CPU cores, which can speed some tasks up significantly.)
+
 You will then be able to use the project code. If this is the first time you do this, there will be a bit of delay as it precompiles some of the code.
 
 You can then create and solve a scenario like
@@ -122,9 +124,31 @@ where `xs` and `xp` are both scalar values; the outputs `s` and `p` will also be
 
 You can also compute the Jacobian of `f` as `df`.
 
+### The `RiskFunc` type
+
+The `RiskFunc.jl` file implements a `RiskFunc` type, which represents the *σ* function in the model. The default risk function is the `MultiplicativeRiskFunc` defined as:
+
+<div style="text-align: center">
+
+![\sigma(s, p) = \prod_i \frac{s_i}{1+s_i}](https://latex.codecogs.com/svg.image?\sigma(s,&space;p)&space;=&space;\prod_i&space;\frac{s_i}{1&plus;s_i} "multiplicative risk function")
+
+</div>
+
+The interpretation is that each *s<sub>i</sub>* represents the *odds* that player *i* causes a disaster, with players' chances of causing a disaster independently distributed, and *σ* being the probability that *no player* causes a disaster.
+
+If you don't like this assumption, you can change how the risk function is defined. Some options are pre-defined in `RiskFunc.jl`, with another reasonable option being the `WinnerOnlyRiskFunc`, defined as:
+
+<div style="text-align: center">
+
+![\sigma(s, p) = \sum_i \left(\frac{p_i}{\sum_j p_j}\right) \left(\frac{s_i}{1+s_i}\right)](https://latex.codecogs.com/svg.image?\sigma(s,&space;p)&space;=&space;\sum_i&space;\left(\frac{p_i}{\sum_j&space;p_j}\right)&space;\left(\frac{s_i}{1&plus;s_i}\right) "winner-only risk function")
+
+</div>
+
+This represents the assumption that only the winning player can cause a disaster (where one's probability of winning is one's performance divided by the sum of everyone's performance).
+
 ### The `CSF` type
 
-The `ProdFunc.jl` file also implements a `CSF` (contest success function) type, which represents the *ρ* function in the model. The constructor takes four parameters, like in the following example:
+The `CSF.jl` file implements a `CSF` (contest success function) type, which represents the *ρ* function in the model. The constructor takes four parameters, like in the following example:
 
 ```julia
 csf = CSF(
@@ -173,18 +197,19 @@ The `Problem.jl` file implements a `Problem` type that represents the payoff fun
 
 <div style="text-align: center">
 
-![\pi_i := \left( \prod_{j=1}^n \frac{s_j}{1+s_j} \right) \rho_i(p) - \left( 1 - \prod_{j=1}^n \frac{s_j}{1+s_j} \right) d_i - r_i(X_{i,s} + X_{i,p})](https://latex.codecogs.com/svg.image?\pi_i&space;:=&space;\left(&space;\prod_{j=1}^n&space;\frac{s_j}{1&plus;s_j}&space;\right)&space;\rho_i(p)&space;-&space;\left(&space;1&space;-&space;\prod_{j=1}^n&space;\frac{s_j}{1&plus;s_j}&space;\right)&space;d_i&space;-&space;r_i(X_{i,s}&space;&plus;&space;X_{i,p}) "formula for payoff").
+![u_i := \sigma(s, p) \rho_i(p) - \left( 1 - \sigma(s, p) \right) d_i - r_i(X_{i,s} + X_{i,p})](https://latex.codecogs.com/svg.image?u_i&space;:=&space;\sigma(s,&space;p)&space;\rho_i(p)&space;-&space;\left(&space;1&space;-&space;\sigma(s,&space;p)&space;\right)&space;d_i&space;-&space;r_i(X_{i,s}&space;&plus;&space;X_{i,p}) "formula for payoff").
 
 </div>
 
 You can construct a `Problem` like this:
 ```julia
 problem = Problem(
-    n_players = 2,
+    n_players = 2,  # default is 2
     d = 1.,
     r = 0.05,
     prodFunc = yourProdFunc,
-    csf = yourCSF
+    riskFunc = yourRiskFunc,  # default is MultiplicativeRiskFunc(n_players)
+    csf = yourCSF  # default is CSF(1, 0, 0, 0)
 )
 ```
 Note that the lengths of `d` and `r` must match and be equal to `n` and `prodFunc.n_players`. Again, you can omit arguments to use default values or provide vectors instead of scalars if you want different values for each player.
@@ -288,7 +313,16 @@ scenario = Scenario(
 ```
 gives us a scenario where player 1 has A = 10, and player 2 has A = 20.
 
-To change the CSF used in a scenario, you can provide to the `Scenario` constructor keyword arguments for `w`, `l`, `a_w`, and `a_l`. (The defaults are 1 for `w` and 0 for the others.)
+You can also supply `riskFunc` and `csf` arguments to the scenario constructor if you want to use something other than the defaults, e.g.:
+```julia
+scenario = Scenario(
+    n_players = 2,
+    r = range(0.01, 0.1, length = 20),
+    varying_param = :r,
+    riskFunc = WinnerOnlyRiskFunc(),
+    csf = CSF(1, 0, 0.01, 0.01)
+)
+```
 
 To find the equilibrium solutions for a scenario, use the `solve` function:
 ```julia
@@ -327,7 +361,4 @@ plot_result(
 )
 ```
 
-## More about plotting
-
-To-do
-
+The `plot_result` method will return a plot object that you can edit with the `Plots.jl` package. This plot will have 6 subplots, but if you only want one of those subplots, you can use `get_plots_for_result` instead of `plot_result` to get a list of those subplots.
