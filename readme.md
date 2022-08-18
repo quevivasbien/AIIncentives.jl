@@ -189,8 +189,6 @@ or just
 reward_for_player_i = csf(i, p)
 ```
 
-You can also get derivatives with `all_reward_derivs` and `reward_deriv`.
-
 ### The `Problem` type
 
 The `Problem.jl` file implements a `Problem` type that represents the payoff function
@@ -247,8 +245,6 @@ solve(
 To see what options are available, take a look at the fields in the `SolverOptions` struct in `solve.jl`. (You should be able to access these using the command `fieldnames(AIIncentives.SolverOptions)`.)
 
 The other methods you can use are the following:
-
-* `method = :roots` attempts to find pure strategy equilibria by solving the first order conditions. This is typically quite fast but fails pretty often, returning bogus results.
 
 * `method = :scatter` runs the iterating method with multiple, randomly-selected, starting points. The returned `SolverResult` will contain the solutions from each of those starting points. (Ideally, the solutions should all be the same.) This is typically just helpful for figuring out if solutions are sensitive to the starting point.
 

@@ -211,52 +211,6 @@ function solve_scatter(
 end
 
 
-# ROOT-FINDING METHOD `solve_roots`
-
-function solve_roots(
-    problem::Problem,
-    options = SolverOptions();
-    f_tol = 1e-8,
-    init_guesses::Vector{Float64} = [10.0^(3*i) for i in -2:2]
-)
-    jac! = get_jac(problem, inplace = true)
-    function obj!(val, x)
-        # reshape x to block format as expected by jac! function
-        # also take exponential to force positive bounds
-        y = reshape(exp.(x), (problem.n, 2))
-        # fill jacobian at y
-        jac!(val, y)
-    end
-    n_guesses = length(init_guesses)
-    results = Array{Float64}(undef, n_guesses, problem.n, 2)
-    successes = falses(n_guesses)
-    Threads.@threads for i in 1:n_guesses
-        init_guess = fill(init_guesses[i], problem.n * 2)
-        res = nlsolve(
-            obj!,
-            log.(init_guess),
-            ftol = f_tol,
-            method = :trust_region  # this is just the default
-        )
-        solution = reshape(exp.(res.zero), (problem.n, 2))
-        if res.f_converged && (!options.verify || verify(problem, solution, options))
-            successes[i] = true
-            results[i, :, :] = solution
-        end
-    end
-    if !any(successes)
-        println("Roots solver failed to converge from the given initial guesses!")
-        return get_null_result(problem.n)
-    end
-    results = results[successes, :, :]
-    solverResults = [
-        SolverResult(problem, true, results[i, :, 1], results[i, :, 2])
-        for i in axes(results, 1)
-    ]
-    return resolve_multiple_solutions(solverResults, problem)
-end
-
-
 # Solver for mixed strategy equilibria
 # Runs iterating solver over history of run
 

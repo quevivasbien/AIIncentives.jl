@@ -49,35 +49,6 @@ end
 
 (prodFunc::ProdFunc)(Xs::Vector, Xp::Vector) = f(prodFunc, Xs, Xp)
 
-function df_from_s_p(prodFunc::ProdFunc, i::Integer, s::Number, p::Number)
-    s_mult = prodFunc.A[i] * prodFunc.α[i] * (s / prodFunc.A[i])^(1. - 1. / prodFunc.α[i])
-    p_mult = prodFunc.B[i] * prodFunc.β[i] * (p / prodFunc.B[i]) ^ (1. - 1. / prodFunc.β[i])
-    dsdXs = s_mult * p^(-prodFunc.θ[i])
-    dsdXp = -prodFunc.θ[i] * s * p^(-prodFunc.θ[i] - 1.) .* p_mult
-    return [dsdXs dsdXp; 0. p_mult]
-end
-
-function df(prodFunc::ProdFunc, i::Integer, Xs::Number, Xp::Number)
-    (s, p) = f(prodFunc, i, Xs, Xp)
-    return df_from_s_p(prodFunc, s, p)
-end
-
-function df_from_s_p(prodFunc::ProdFunc, s::Vector, p::Vector)
-    s_mult = prodFunc.A .* prodFunc.α .* (s ./ prodFunc.A) .^ (1. .- 1. ./ prodFunc.α)
-    p_mult = prodFunc.B .* prodFunc.β .* (p ./ prodFunc.B) .^ (1. .- 1. ./ prodFunc.β)
-    dsdXs = s_mult .* p.^(-prodFunc.θ)
-    dsXp = -prodFunc.θ .* s .* p.^(-prodFunc.θ .- 1.) .* p_mult
-    return reshape(
-        vcat(dsdXs, dsXp, zeros(size(p_mult)), p_mult),
-        prodFunc.n, 2, 2
-    )
-end
-
-function df(prodFunc::ProdFunc, Xs::Vector, Xp::Vector)
-    (s, p) = f(prodFunc, Xs, Xp)
-    return df_from_s_p(prodFunc, s, p)
-end
-
 function is_symmetric(prodFunc::ProdFunc)
     all(
         all(x[1] .== x[2:prodFunc.n])
