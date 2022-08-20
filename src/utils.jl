@@ -1,6 +1,6 @@
 # Utility functions, not dependent on special types, used throughout the package
 
-function as_Float64_Array(x::Union{Real, AbstractArray}, n::Integer)
+function as_Float64_Array(x::Union{Real, AbstractArray}, n::Int)
     if isa(x, AbstractArray)
         return convert(Array{Float64}, x)
     end

@@ -566,7 +566,7 @@ function plot_payoffs_near_solution(problem, result::SolverResult)
     )
 end
 
-function plot_payoffs_near_solution(result::ScenarioResult, index::Integer)
+function plot_payoffs_near_solution(result::ScenarioResult, index::Int)
     problem = get_problem_from_scenario(result.scenario, index)
     if isnothing(problem)
         return

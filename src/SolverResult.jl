@@ -9,8 +9,8 @@ struct SolverResult{T <: Real}
 end
 
 function prune_duplicates(results::Vector{SolverResult}; atol = 1e-6, rtol=5e-2)
-    dups = Vector{Integer}()
-    unique = Vector{Integer}()
+    dups = Vector{Int}()
+    unique = Vector{Int}()
     n_results = length(results)
     for i in 1:n_results
         if i in dups

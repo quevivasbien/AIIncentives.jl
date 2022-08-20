@@ -7,7 +7,7 @@ end
 
 CSF(; w = 1., l = 0., a_w = 0., a_l = 0.) = CSF(w, l, a_w, a_l)
 
-function reward(csf::CSF, i::Integer, p::Vector)
+function reward(csf::CSF, i::Int, p::Vector)
     sum_ = sum(p)
     if sum_ == 0.
         return 1. / length(p)
@@ -19,7 +19,7 @@ function reward(csf::CSF, i::Integer, p::Vector)
     )
 end
 
-(csf::CSF)(i::Integer, p::Vector) = reward(csf, i, p)
+(csf::CSF)(i::Int, p::Vector) = reward(csf, i, p)
 
 function all_rewards(csf::CSF, p::Vector)
     sum_ = sum(p)
@@ -35,7 +35,7 @@ end
 
 (csf::CSF)(p::Vector) = all_rewards(csf, p)
 
-function reward_deriv(csf::CSF, i::Integer, p::Vector)
+function reward_deriv(csf::CSF, i::Int, p::Vector)
     sum_ = sum(p)
     if sum_ == 0.
         return Inf
@@ -61,7 +61,7 @@ function all_reward_derivs(csf::CSF, p::Vector)
     )
 end
 
-function reward_and_deriv(csf::CSF, i::Integer, p::Vector)
+function reward_and_deriv(csf::CSF, i::Int, p::Vector)
     sum_ = sum(p)
     if sum_ == 0.
         return (1. / length(p), Inf)

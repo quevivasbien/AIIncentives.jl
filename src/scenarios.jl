@@ -1,5 +1,5 @@
 mutable struct Scenario{T}
-    n_players::Integer
+    n_players::Int
     A::Array{T}
     α::Array{T}
     B::Array{T}
@@ -26,7 +26,7 @@ end
 
 function Scenario(
     ;
-    n_players::Integer = 2,
+    n_players::Int = 2,
     A::Union{Real, AbstractArray} = 10., α::Union{Real, AbstractArray} = 0.5,
     B::Union{Real, AbstractArray} = 10., β::Union{Real, AbstractArray} = 0.5,
     θ::Union{Real, AbstractArray} = 0.5,
@@ -83,7 +83,7 @@ function extract(res::ScenarioResult{SolverResult, 1}, field::Symbol)
 end
 
 function get_problem_from_scenario(scenario::Scenario, index)
-    if index isa Integer
+    if index isa Int
         @assert isnothing(scenario.secondary_varying_param)
     end
     (_, A, α, B, β, θ, d, r) = if isnothing(scenario.secondary_varying_param)

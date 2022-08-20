@@ -1,5 +1,5 @@
 struct Problem{T <: Real}
-    n::Integer
+    n::Int
     d::Vector{T}
     r::Vector{T}
     prodFunc::ProdFunc{T}
@@ -9,7 +9,7 @@ end
 
 function Problem(
     ;
-    n::Integer = 2,
+    n::Int = 2,
     d::Union{Real, AbstractVector} = 0.,
     r::Union{Real, AbstractVector} = 0.1,
     RiskFunc::Union{RiskFunc, Nothing} = nothing,
@@ -30,7 +30,7 @@ function Problem(
     return problem
 end
 
-function payoff(problem::Problem, i::Integer, Xs::Vector, Xp::Vector)
+function payoff(problem::Problem, i::Int, Xs::Vector, Xp::Vector)
     (s, p) = f(problem.prodFunc, Xs, Xp)
     σ = get_total_safety(problem.riskFunc, s, p)
     return σ .* reward(problem.csf, i, p) .- (1. .- σ) .* problem.d[i] .- problem.r[i] .* (Xs[i] + Xp[i])
@@ -46,7 +46,7 @@ function all_payoffs(problem::Problem, Xs::Vector, Xp::Vector)
     return all_payoffs_with_s_p(problem, Xs, Xp, s, p)
 end
 
-function get_func(problem::Problem, i::Integer, strats::Array)
+function get_func(problem::Problem, i::Int, strats::Array)
     strats_ = copy(strats)
     function func(x)
         strats_[i, :] = x

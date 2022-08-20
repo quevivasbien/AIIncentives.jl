@@ -2,17 +2,17 @@ const EPSILON = 1e-8  # small number to help numerical stability in some places
 
 Base.@kwdef struct SolverOptions{T <: AbstractFloat}
     tol::T = 1e-6
-    max_iters::Integer = 100
+    max_iters::Int = 100
     iter_algo::Optim.AbstractOptimizer = NelderMead()
     iter_options::Optim.Options = Optim.Options(x_tol = 1e-8, iterations = 500)
     init_guess::T = 1.
-    n_points::Integer = 4
+    n_points::Int = 4
     init_mu::T = 0.
     init_sigma::T = 1.
     verbose::Bool = false
     verify::Bool = true
     verify_mult::T = 1.1
-    retries::Integer = 10
+    retries::Int = 10
 end
 
 function SolverOptions(options::SolverOptions; kwargs...)

@@ -1,5 +1,5 @@
 struct ProdFunc{T <: Real}
-    n::Integer
+    n::Int
     A::Vector{T}
     α::Vector{T}
     B::Vector{T}
@@ -9,7 +9,7 @@ end
 
 function ProdFunc(
     ;
-    n::Integer = 2,
+    n::Int = 2,
     A::Union{Real, AbstractVector} = 10.,
     α::Union{Real, AbstractVector} = 0.5,
     B::Union{Real, AbstractVector} = 10.,
@@ -32,14 +32,14 @@ end
 ProdFunc(A, α, B, β, θ) = ProdFunc(n=length(A), A=A, α=α, B=B, β=β, θ=θ)
 
 
-function f(prodFunc::ProdFunc, i::Integer, Xs::Number, Xp::Number)
+function f(prodFunc::ProdFunc, i::Int, Xs::Number, Xp::Number)
     p = prodFunc.B[i] * Xp^prodFunc.β[i]
     s = prodFunc.A[i] * Xs^prodFunc.α[i] * p^(-prodFunc.θ[i])
     return s, p
 end
 
 # allow direct calling of prodFunc
-(prodFunc::ProdFunc)(i::Integer, Xs::Number, Xp::Number) = f(prodFunc, i, Xs, Xp)
+(prodFunc::ProdFunc)(i::Int, Xs::Number, Xp::Number) = f(prodFunc, i, Xs, Xp)
 
 function f(prodFunc::ProdFunc, Xs::Vector, Xp::Vector)
     p = prodFunc.B .* Xp.^prodFunc.β

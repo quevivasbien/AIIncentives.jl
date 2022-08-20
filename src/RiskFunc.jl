@@ -6,7 +6,7 @@ struct MultiplicativeRiskFunc{T <: Real} <: RiskFunc
     cum_w::T
 end
 
-function MultiplicativeRiskFunc(n::Integer, w::T = 1.0) where {T <: Real}
+function MultiplicativeRiskFunc(n::Int, w::T = 1.0) where {T <: Real}
     @assert n >= 2 "n must be at least 2"
     w_ = convert(Float64, w)
     return MultiplicativeRiskFunc(fill(w_, n), w_)
@@ -36,7 +36,7 @@ struct AdditiveRiskFunc{T <: Real} <: RiskFunc
     cum_w::T
 end
 
-function AdditiveRiskFunc(n::Integer, w::T = 1.0) where {T <: Real}
+function AdditiveRiskFunc(n::Int, w::T = 1.0) where {T <: Real}
     @assert n >= 2 "n must be at least 2"
     w_ = convert(Float64, w)
     return AdditiveRiskFunc(fill(w_, n), n / w_)
