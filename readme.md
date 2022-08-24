@@ -62,7 +62,7 @@ solution = solve(scenario)
 
 This will find Nash equilibria over the given parameterization and range of values for `r`. To generate a plot of the result, you can execute
 ```julia
-plot_result(solution)
+plot(solution)
 ```
 
 The first time you run something in the Julia session, it will take a while, since Julia compiles your code the first time you run it in a new setting. It should run a lot faster after that. Because of this, I recommend working within a Julia REPL session or a Jupyter notebook.
@@ -344,11 +344,11 @@ results = solve(
 
 You can plot the results as
 ```julia
-plot_result(result)
+plot(result)
 ```
 where `result` is a `ScenarioResult`. You can provide arguments to customize the plot:
 ```julia
-plot_result(
+plot(
     result,
     plotsize = (900, 800),
     title = "Mixed strategy solutions",
@@ -357,4 +357,4 @@ plot_result(
 )
 ```
 
-The `plot_result` method will return a plot object that you can edit with the `Plots.jl` package. This plot will have 6 subplots, but if you only want one of those subplots, you can use `get_plots_for_result` instead of `plot_result` to get a list of those subplots.
+The `plot` method will return a plot object that you can edit with the `Plots.jl` package. This plot will have 6 subplots, but if you only want one of those subplots, you can use `get_plots` instead of `plot` to get a list of those subplots.

@@ -254,5 +254,5 @@ function test_scenarios(method = :hybrid)
     )
 
     @time res = solve(scenario, method = method, verbose  = true)
-    plot_result(res)
+    plot(res)
 end

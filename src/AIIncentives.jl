@@ -1,7 +1,8 @@
 module AIIncentives
 
-using Optim, NLsolve
+using Optim
 using Plots, Plots.PlotMeasures
+using Plots: RecipesBase.plot
 
 using LinearAlgebra: diagind
 
@@ -17,8 +18,10 @@ export
     SolverOptions,
     Scenario,
 
-    get_plots_for_result,
-    plot_result,
+    get_plots,
+    get_plots_for_result,  # deprecated
+    plot,
+    plot_result,  # deprecated
     plot_payoffs_with_xs,
     plot_payoffs_with_xp,
     plot_payoffs,

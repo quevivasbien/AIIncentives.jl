@@ -339,7 +339,7 @@ function get_labels_for_secondary_result_plot(res::ScenarioResult)
 end
 
 # for results with no secondary variation and only one result per problem
-function get_plots_for_result(
+function get_plots(
     res::ScenarioResult{SolverResult, 1};
     xaxis = nothing,
     labels = nothing,
@@ -358,7 +358,7 @@ function get_plots_for_result(
 end
 
 # for scenarios with secondary variation
-function get_plots_for_result(
+function get_plots(
     res::ScenarioResult{SolverResult, 2};
     xaxis = nothing,
     labels = nothing,
@@ -377,7 +377,7 @@ function get_plots_for_result(
 end
 
 # for results with no secondary variation and multiple results per problem
-function get_plots_for_result(
+function get_plots(
     res::ScenarioResult{Vector{SolverResult}, 1};
     xaxis = nothing,
     labels = nothing,
@@ -397,7 +397,7 @@ function get_plots_for_result(
 end
 
 # for results with no secondary variation and only one result per problem
-function plot_result(
+function RecipesBase.plot(
     res::ScenarioResult{SolverResult, 1};
     xaxis = nothing,
     plotsize = (900, 900),
@@ -421,8 +421,13 @@ function plot_result(
     )
 end
 
+function get_plots_for_result(res; kwargs...)
+    println("Warning: `get_plots_for_result` is deprecated. Use `get_plots` instead.")
+    return get_plots(res; kwargs...)
+end
+
 # for scenarios with secondary variation
-function plot_result(
+function RecipesBase.plot(
     res::ScenarioResult{SolverResult, 2};
     xaxis = nothing,
     plotsize = (900, 900),
@@ -447,7 +452,7 @@ function plot_result(
 end
 
 # for results with no secondary variation and multiple results per problem
-function plot_result(
+function RecipesBase.plot(
     res::ScenarioResult{Vector{SolverResult}, 1};
     xaxis = nothing,
     plotsize = (900, 900),
@@ -472,6 +477,10 @@ function plot_result(
     )
 end
 
+function plot_result(res; kwargs...)
+    println("Warning: `plot_result` is deprecated. Use `get_plots` instead.")
+    return plot(res; kwargs...)
+end
 
 # FUNCTIONS FOR PLOTTING PAYOFFS (TO VISUALLY VERIFY EQUILIBRIUM)
 
