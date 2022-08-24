@@ -323,19 +323,19 @@ function create_plot(results::Array{SolverResult, 2}, xaxis, xlabel, plotsize, l
 end
 
 function get_xaxis_for_result_plot(res::ScenarioResult)
-    varying_param = getfield(res.scenario, res.scenario.varying_param)
-    n_steps = size(varying_param, 1)
-    return if varying_param[:, 2] == varying_param[:, 1]
-        varying_param[:, 1]
+    varying = getfield(res.scenario, res.scenario.varying)
+    n_steps = size(varying, 1)
+    return if varying[:, 2] == varying[:, 1]
+        varying[:, 1]
     else
         1:n_steps
     end
 end
 
 function get_labels_for_secondary_result_plot(res::ScenarioResult)
-    secondary_varying_param = getfield(res.scenario, res.scenario.secondary_varying_param)
-    n_steps_secondary = size(secondary_varying_param, 1)
-    return ["$(res.scenario.secondary_varying_param) = $(secondary_varying_param[i, :])" for i in 1:n_steps_secondary]
+    varying2 = getfield(res.scenario, res.scenario.varying2)
+    n_steps_secondary = size(varying2, 1)
+    return ["$(res.scenario.varying2) = $(varying2[i, :])" for i in 1:n_steps_secondary]
 end
 
 # for results with no secondary variation and only one result per problem
@@ -351,7 +351,7 @@ function get_plots_for_result(
     create_plots(
         res.solverResults,
         xaxis,
-        res.scenario.varying_param,
+        res.scenario.varying,
         labels, 
         exclude_failed = exclude_failed
     )
@@ -370,7 +370,7 @@ function get_plots_for_result(
     create_plots(
         res.solverResults,
         xaxis,
-        res.scenario.varying_param,
+        res.scenario.varying,
         labels,
         exclude_failed = exclude_failed
     )
@@ -389,7 +389,7 @@ function get_plots_for_result(
     create_scatterplots(
         res.solverResults,
         xaxis,
-        res.scenario.varying_param,
+        res.scenario.varying,
         labels,
         take_avg = take_avg,
         exclude_failed = exclude_failed
@@ -412,7 +412,7 @@ function plot_result(
     create_plot(
         res.solverResults,
         xaxis,
-        res.scenario.varying_param,
+        res.scenario.varying,
         plotsize,
         labels,
         title,
@@ -437,7 +437,7 @@ function plot_result(
     create_plot(
         res.solverResults,
         xaxis,
-        res.scenario.varying_param,
+        res.scenario.varying,
         plotsize,
         labels,
         title,
@@ -462,7 +462,7 @@ function plot_result(
     create_scatterplot(
         res.solverResults,
         xaxis,
-        res.scenario.varying_param,
+        res.scenario.varying,
         plotsize, 
         labels,
         title,

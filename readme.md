@@ -53,7 +53,7 @@ scenario = Scenario(
     θ = 0.25, 
     d = 1.,
     r = range(0.01, 0.1, length = 20),
-    varying_param = :r
+    varying = :r
 )
 
 solution = solve(scenario)
@@ -126,7 +126,7 @@ You can also compute the Jacobian of `f` as `df`.
 
 ### The `RiskFunc` type
 
-The `RiskFunc.jl` file implements a `RiskFunc` type, which represents the *σ* function in the model. The default risk function is the `MultiplicativeRiskFunc` defined as:
+The `RiskFunc.jl` file implements a `RiskFunc` type, which represents the *σ* function in the model. The default risk function is the `MultiplicativeRisk` defined as:
 
 <div style="text-align: center">
 
@@ -136,7 +136,7 @@ The `RiskFunc.jl` file implements a `RiskFunc` type, which represents the *σ* f
 
 The interpretation is that each *s<sub>i</sub>* represents the *odds* that player *i* causes a disaster, with players' chances of causing a disaster independently distributed, and *σ* being the probability that *no player* causes a disaster.
 
-If you don't like this assumption, you can change how the risk function is defined. Some options are pre-defined in `RiskFunc.jl`, with another reasonable option being the `WinnerOnlyRiskFunc`, defined as:
+If you don't like this assumption, you can change how the risk function is defined. Some options are pre-defined in `RiskFunc.jl`, with another reasonable option being the `WinnerOnlyRisk`, defined as:
 
 <div style="text-align: center">
 
@@ -206,7 +206,7 @@ problem = Problem(
     d = 1.,
     r = 0.05,
     prodFunc = yourProdFunc,
-    riskFunc = yourRiskFunc,  # default is MultiplicativeRiskFunc(n_players)
+    riskFunc = yourRiskFunc,  # default is MultiplicativeRisk(n_players)
     csf = yourCSF  # default is CSF(1, 0, 0, 0)
 )
 ```
@@ -271,10 +271,10 @@ scenario = Scenario(
     θ = 0.25, 
     d = 1.,
     r = range(0.01, 0.1, length = 20),
-    varying_param = :r
+    varying = :r
 )
 ```
-which defines a 2-player scenario where `r` varies over 20 values between 0.01 and 0.1. Notice that we construct the scenario with all the variables we would normally provide to create a `ProdFunc` and `Problem`. Most of the arguments are single values, but the parameter we want to vary is not; that parameter must be an array with a column for each player and a row for each value we want to use. (You can also provide a single vector, in which case it will be assumed that you want to use the same values for all players.) We also need to specify which parameter we're varying with the `varying_param` keyword argument (if not included, the default is `:r`). 
+which defines a 2-player scenario where `r` varies over 20 values between 0.01 and 0.1. Notice that we construct the scenario with all the variables we would normally provide to create a `ProdFunc` and `Problem`. Most of the arguments are single values, but the parameter we want to vary is not; that parameter must be an array with a column for each player and a row for each value we want to use. (You can also provide a single vector, in which case it will be assumed that you want to use the same values for all players.) We also need to specify which parameter we're varying with the `varying` keyword argument (if not included, the default is `:r`). 
 
 If we want, we can include a second varying parameter, like so:
 ```julia
@@ -287,8 +287,8 @@ scenario = Scenario(
     θ = range(0., 1., length = 4),
     d = 1.,
     r = range(0.01, 0.1, length = 20),
-    varying_param = :r,
-    secondary_varying_param = :θ
+    varying = :r,
+    varying2 = :θ
 )
 ```
 In this example, we look at the problem with every combination of the provided varying and secondary varying parameters. The only difference between the two is that when we plot the results, the varying parameter will vary along the x-axis, while the secondary varying parameter will vary in different series.
@@ -304,7 +304,7 @@ scenario = Scenario(
     θ = 0.25, 
     d = 1.,
     r = range(0.01, 0.1, length = 20),
-    varying_param = :r
+    varying = :r
 )
 ```
 gives us a scenario where player 1 has A = 10, and player 2 has A = 20.
@@ -314,8 +314,8 @@ You can also supply `riskFunc` and `csf` arguments to the scenario constructor i
 scenario = Scenario(
     n_players = 2,
     r = range(0.01, 0.1, length = 20),
-    varying_param = :r,
-    riskFunc = WinnerOnlyRiskFunc(),
+    varying = :r,
+    riskFunc = WinnerOnlyRisk(),
     csf = CSF(1, 0, 0.01, 0.01)
 )
 ```

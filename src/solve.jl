@@ -371,7 +371,7 @@ end
 function test_solve()
     println("Running test on `solve.jl`...")
     prodFunc = ProdFunc([10., 10.], [0.5, 0.5], [10., 10.], [0.5, 0.5], [0.25, 0.25])
-    riskFunc = MultiplicativeRiskFunc(2)
+    riskFunc = MultiplicativeRisk(2)
     csf = CSF(1., 0., 0., 0.)
     problem = Problem(2, [1., 1.], [0.01, 0.01], riskFunc, prodFunc, csf)
     options = SolverOptions(verbose = true)

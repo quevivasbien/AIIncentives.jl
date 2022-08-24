@@ -1,92 +1,26 @@
-struct CSF
-    w::Real
-    l::Real
-    a_w::Real
-    a_l::Real
+"""
+Controls probability that each player wins, as function of p
+Subtypes must implement `proba_win(p)` and `proba_win(i, p)`
+"""
+abstract type CSF end
+
+(csf::CSF)(
+    p::AbstractVector{T}
+) where {T <: Real} = proba_win(csf, p)
+
+(csf::CSF)(
+    i::Int,
+    p::AbstractVector{T}
+) where {T <: Real} = proba_win(csf, i, p)
+
+
+"Probability of i winning is p[i] / sum(p)"
+struct BasicCSF <: CSF end
+
+function proba_win(csf::BasicCSF, p::AbstractVector{T}) where {T <: Real}
+    return p ./ sum(p)
 end
 
-CSF(; w = 1., l = 0., a_w = 0., a_l = 0.) = CSF(w, l, a_w, a_l)
-
-function reward(csf::CSF, i::Int, p::Vector)
-    sum_ = sum(p)
-    if sum_ == 0.
-        return 1. / length(p)
-    end
-    win_proba = p[i] / sum_
-    return (
-        (csf.w + p[i] * csf.a_w) * win_proba
-        + (csf.l + p[i] * csf.a_l) * (1. - win_proba)
-    )
-end
-
-(csf::CSF)(i::Int, p::Vector) = reward(csf, i, p)
-
-function all_rewards(csf::CSF, p::Vector)
-    sum_ = sum(p)
-    if sum_ == 0.
-        return fill(1. / length(p), length(p))
-    end
-    win_probas = p ./ sum_
-    return (
-        (csf.w .+ p .* csf.a_w) .* win_probas
-        .+ (csf.l .+ p .* csf.a_l) .* (1. .- win_probas)
-    )
-end
-
-(csf::CSF)(p::Vector) = all_rewards(csf, p)
-
-function reward_deriv(csf::CSF, i::Int, p::Vector)
-    sum_ = sum(p)
-    if sum_ == 0.
-        return Inf
-    end
-    win_proba = p[i] / sum_
-    win_proba_deriv = (sum_ .- p[i]) ./ sum_.^2
-    return (
-        csf.a_l + (csf.a_w - csf.a_l) * win_proba
-        + (csf.w - csf.l + (csf.a_w - csf.a_l) * p[i]) * win_proba_deriv
-    )
-end
-
-function all_reward_derivs(csf::CSF, p::Vector)
-    sum_ = sum(p)
-    if sum_ == 0.
-        return fill(Inf, length(p))
-    end
-    win_probas = p ./ sum_
-    win_proba_derivs = (sum_ .- p) ./ sum_.^2
-    return (
-        csf.a_l .+ (csf.a_w - csf.a_l) .* win_probas
-        + (csf.w - csf.l .+ (csf.a_w - csf.a_l) .* p) .* win_proba_derivs
-    )
-end
-
-function reward_and_deriv(csf::CSF, i::Int, p::Vector)
-    sum_ = sum(p)
-    if sum_ == 0.
-        return (1. / length(p), Inf)
-    end
-    win_proba = p[i] ./ sum_
-    win_proba_deriv = (sum_ .- p[i]) ./ sum_.^2
-    reward = (csf.w + p[i] * csf.a_w) * win_proba + (csf.l + p[i] * csf.a_l) * (1. - win_proba)
-    return (
-        reward,
-        csf.a_l + (csf.a_w - csf.a_l) * win_proba
-        + (csf.w - csf.l + (csf.a_w - csf.a_l) * p[i]) * win_proba_deriv
-    )
-end
-
-function all_rewards_and_derivs(csf::CSF, p::Vector)
-    sum_ = sum(p)
-    if sum_ == 0.
-        return (fill(1 / length(p), length(p)), fill(Inf, length(p)))
-    end
-    win_probas = p ./ sum_
-    win_proba_derivs = (sum_ .- p) ./ sum_.^2
-    rewards = (csf.w .+ p .* csf.a_w) .* win_probas .+ (csf.l .+ p .* csf.a_l) .* (1. .- win_probas)
-    return (
-        rewards,
-        csf.a_l .+ (csf.a_w - csf.a_l) .* win_probas
-        + (csf.w - csf.l .+ (csf.a_w - csf.a_l) .* p) .* win_proba_derivs
-    )
+function proba_win(csf::BasicCSF, i::Int, p::AbstractVector{T}) where {T <: Real}
+    return p[i] / sum(p)
 end

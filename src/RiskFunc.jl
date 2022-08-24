@@ -1,74 +1,116 @@
+"""
+A type that controls the probability of a safe outcome
+Subtypes must implement function `σ(rf, p)` and `σ(rf, i, p)`
+"""
 abstract type RiskFunc end
 
+(rf::RiskFunc)(
+    s::AbstractVector{T}
+) where {T <: Real} = σ(rf, s)
 
-struct MultiplicativeRiskFunc{T <: Real} <: RiskFunc
+(rf::RiskFunc)(
+    i::Int,
+    s::AbstractVector{T}
+) where {T <: Real} = σ(rf, i, s)
+
+"""
+Proba(safe) is weighted geometric mean of s / (1+s), to the nth power
+w is vector of weights
+if w is all ones, proba(safe) is simply the product of s / (1+s)
+"""
+struct MultiplicativeRisk{T <: Real} <: RiskFunc
     w::Vector{T}
-    cum_w::T
+    cum_w::T  # sum of w
+    n::Int  # length of w
 end
 
-function MultiplicativeRiskFunc(n::Int, w::T = 1.0) where {T <: Real}
+function MultiplicativeRisk(n::Int, w::T = 1.0) where {T <: Real}
     @assert n >= 2 "n must be at least 2"
     w_ = convert(Float64, w)
-    return MultiplicativeRiskFunc(fill(w_, n), w_)
+    return MultiplicativeRisk(fill(w_, n), w_, n)
 end
 
-function MultiplicativeRiskFunc(w::Vector{T}) where {T <: Real}
+function MultiplicativeRisk(w::Vector{T}) where {T <: Real}
     n = length(w)
     @assert n >= 2 "n must be at least 2"
     w_ = convert(Array{Float64}, w)
-    return MultiplicativeRiskFunc(w_, n / sum(w_))
+    return MultiplicativeRisk(w_, n / sum(w_), n)
 end
 
-function get_total_safety(
-    rf::MultiplicativeRiskFunc,
-    s::AbstractVector{T},
-    p::Union{AbstractVector{T}, Nothing} = nothing
+function σ(
+    rf::MultiplicativeRisk,
+    i::Int,
+    s::AbstractVector{T}
 ) where {T <: Real}
-    # safety is weighted geometric mean of s / (1+s), to the nth power
-    # if w is all ones, this is just the product of s / (1+s)
     probas = get_probas(s)
     return prod(probas .* rf.w) ^ rf.cum_w
 end
 
+function σ(
+    rf::MultiplicativeRisk,
+    s::AbstractVector{T}
+) where {T <: Real}
+    probas = get_probas(s)
+    return fill(prod(probas .* rf.w) ^ rf.cum_w, length(rf.w))
+end
 
-struct AdditiveRiskFunc{T <: Real} <: RiskFunc
+
+"""
+Proba(safe) is weighted arithmetic mean of s / (1+s)
+w is vector of weights
+if w is all ones, the proba(safe) is simply mean of s / (1+s)
+"""
+struct AdditiveRisk{T <: Real} <: RiskFunc
     w::Vector{T}
     cum_w::T
 end
 
-function AdditiveRiskFunc(n::Int, w::T = 1.0) where {T <: Real}
+function AdditiveRisk(n::Int, w::T = 1.0) where {T <: Real}
     @assert n >= 2 "n must be at least 2"
     w_ = convert(Float64, w)
-    return AdditiveRiskFunc(fill(w_, n), n / w_)
+    return AdditiveRisk(fill(w_, n), n / w_)
 end
 
-function AdditiveRiskFunc(w::Vector{T}) where {T <: Real}
+function AdditiveRisk(w::Vector{T}) where {T <: Real}
     n = length(w)
     @assert n >= 2 "n must be at least 2"
     w_ = convert(Array{Float64}, w)
-    return AdditiveRiskFunc(w_, n / sum(w_))
+    return AdditiveRisk(w_, n / sum(w_))
 end
 
-function get_total_safety(
-    rf::AdditiveRiskFunc,
-    s::AbstractVector{T},
-    p::Union{AbstractVector{T}, Nothing} = nothing
+function σ(
+    rf::AdditiveRisk,
+    i::Int,
+    s::AbstractVector{T}
 ) where {T <: Real}
-    # safety is weighted arithmetic meand of s / (1+s), times n
-    # if w is all ones, this is just the sum of s / (1+s)
     probas = get_probas(s)
-    return sum(probas .* rf.w) * rf.cum_w
+    return sum(probas .* rf.w) / rf.cum_w
 end
 
-
-struct WinnerOnlyRiskFunc <: RiskFunc end
-
-function get_total_safety(
-    rf::WinnerOnlyRiskFunc,
-    s::AbstractVector{T},
-    p::Union{AbstractVector{T}, Nothing} = nothing
+function σ(
+    rf::AdditiveRisk,
+    s::AbstractVector{T}
 ) where {T <: Real}
-    # safety is the winner's probability
     probas = get_probas(s)
-    return sum(p .* probas) / sum(p)
+    return fill(sum(probas .* rf.w) / rf.cum_w, length(rf.w))
+end
+
+"""
+Proba(safe) is probability that the winner is safe
+"""
+struct WinnerOnlyRisk <: RiskFunc end
+
+function σ(
+    rf::WinnerOnlyRisk,
+    i::Int,
+    s::AbstractVector{T}
+) where {T <: Real}
+    return get_proba(s[i])
+end
+
+function σ(
+    rf::WinnerOnlyRisk,
+    s::AbstractVector{T}
+) where {T <: Real}
+    return get_probas(s)
 end

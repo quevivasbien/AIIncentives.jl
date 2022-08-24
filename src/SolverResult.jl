@@ -30,7 +30,8 @@ end
 
 function get_s_p_σ_payoffs(problem::Problem, Xs_, Xp_)
     (s, p) = f(problem.prodFunc, Xs_, Xp_)
-    σ = get_total_safety(problem.riskFunc, s, p)
+    # proba(safe) = sum(proba(i safe) * proba(i win))
+    σ = sum(problem.riskFunc(s) .* problem.csf(p))
     payoffs = all_payoffs_with_s_p(problem, Xs_, Xp_, s, p)
     return s, p, σ, payoffs
 end

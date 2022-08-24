@@ -9,15 +9,16 @@ mutable struct Scenario{T}
     r::Array{T}
     riskFunc::RiskFunc
     csf::CSF
-    varying_param::Symbol
-    secondary_varying_param::Union{Symbol, Nothing}
+    payoffFunc::PayoffFunc
+    varying::Symbol
+    varying2::Union{Symbol, Nothing}
 end
 
 function check_param_sizes(scenario::Scenario)
     all(
         (
-            x == scenario.varying_param
-            || x == scenario.secondary_varying_param
+            x == scenario.varying
+            || x == scenario.varying2
             || size(getfield(scenario, x), 1) == scenario.n_players
         )
         for x in [:A, :α, :B, :β, :θ, :d, :r]
@@ -32,35 +33,38 @@ function Scenario(
     θ::Union{Real, AbstractArray} = 0.5,
     d::Union{Real, AbstractArray} = 0.,
     r::Union{Real, AbstractArray} = 0.01:0.01:0.1,
-    riskFunc::Union{RiskFunc, Nothing} = nothing,
-    csf::CSF = CSF(),
-    varying_param::Symbol = :r,
-    secondary_varying_param::Union{Symbol, Nothing} = nothing
+    riskFunc::RiskFunc = WinnerOnlyRisk(),
+    csf::CSF = BasicCSF(),
+    payoffFunc::PayoffFunc = LinearPayoff(0., 1., 0., 0.),
+    varying::Symbol = :r,
+    varying2::Union{Symbol, Nothing} = nothing,
+    varying_param = nothing,
+    secondary_varying_param = nothing
 )
+    @assert isnothing(varying_param) && isnothing(secondary_varying_param) "Use `varying` and `varying2` in place of `varying_param` and `secondary_varying_param`, respectively"
     scenario = Scenario(
         n_players,
         as_Float64_Array(A, n_players), as_Float64_Array(α, n_players),
         as_Float64_Array(B, n_players), as_Float64_Array(β, n_players),
         as_Float64_Array(θ, n_players),
         as_Float64_Array(d, n_players), as_Float64_Array(r, n_players),
-        isnothing(riskFunc) ? MultiplicativeRiskFunc(n_players) : riskFunc,
-        csf,
-        varying_param, secondary_varying_param
+        riskFunc, csf, payoffFunc,
+        varying, varying2
     )
     @assert check_param_sizes(scenario) "Your input params need to match the number of players"
     # expand varying params if necessary
-    vparam = getfield(scenario, varying_param)
+    vparam = getfield(scenario, varying)
     if size(vparam, 2) == 1
         setfield!(
-            scenario, varying_param,
+            scenario, varying,
             repeat(vparam, 1, n_players)
         )
     end
-    if !isnothing(secondary_varying_param)
-        vparam2 = getfield(scenario, secondary_varying_param)
+    if !isnothing(varying2)
+        vparam2 = getfield(scenario, varying2)
         if size(vparam2, 2) == 1
             setfield!(
-                scenario, secondary_varying_param,
+                scenario, varying2,
                 repeat(vparam2, 1, n_players)
             )
         end
@@ -84,9 +88,9 @@ end
 
 function get_problem_from_scenario(scenario::Scenario, index)
     if index isa Int
-        @assert isnothing(scenario.secondary_varying_param)
+        @assert isnothing(scenario.varying2)
     end
-    (_, A, α, B, β, θ, d, r) = if isnothing(scenario.secondary_varying_param)
+    (_, A, α, B, β, θ, d, r) = if isnothing(scenario.varying2)
         get_params(scenario)
     else
         get_params_with_secondary_variation(scenario)
@@ -102,7 +106,8 @@ function get_problem_from_scenario(scenario::Scenario, index)
             θ[:, index...]
         ),
         scenario.riskFunc,
-        scenario.csf
+        scenario.csf,
+        scenario.payoffFunc
     )
 end
 
@@ -110,10 +115,10 @@ end
 # SOLVER FUNCTIONS:
 
 function get_params_with_secondary_variation(scenario)
-    varying_param = transpose(getfield(scenario, scenario.varying_param))
-    n_steps = size(varying_param, 2)
-    secondary_varying_param = transpose(getfield(scenario, scenario.secondary_varying_param))
-    n_steps_secondary = size(secondary_varying_param, 2)
+    varying = transpose(getfield(scenario, scenario.varying))
+    n_steps = size(varying, 2)
+    varying2 = transpose(getfield(scenario, scenario.varying2))
+    n_steps_secondary = size(varying2, 2)
     # create stacks of variables to send to solver
     # everything needs to have shape n_players x n_steps x n_steps_secondary
     A = similar(scenario.A, (scenario.n_players, n_steps, n_steps_secondary))
@@ -124,15 +129,15 @@ function get_params_with_secondary_variation(scenario)
     d = similar(scenario.d, (scenario.n_players, n_steps, n_steps_secondary))
     r = similar(scenario.r, (scenario.n_players, n_steps, n_steps_secondary))
     for (newvar, symbol) in zip((A, α, B, β, θ, d, r), (:A, :α, :B, :β, :θ, :d, :r))
-        if symbol == scenario.varying_param
+        if symbol == scenario.varying
             copyto!(
                 newvar,
-                repeat(varying_param, outer = (1, n_steps_secondary))
+                repeat(varying, outer = (1, n_steps_secondary))
             )
-        elseif symbol == scenario.secondary_varying_param
+        elseif symbol == scenario.varying2
             copyto!(
                 newvar,
-                repeat(secondary_varying_param, inner = (1, n_steps))
+                repeat(varying2, inner = (1, n_steps))
             )
         else
             var = getfield(scenario, symbol)
@@ -161,8 +166,7 @@ function solve_with_secondary_variation(
     end
     Threads.@threads for i in 1:n_steps
         Threads.@threads for j in 1:n_steps_secondary
-            prodFunc = ProdFunc(A[:, i, j], α[:, i, j], B[:, i, j], β[:, i, j], θ[:, i, j])
-            problem = Problem(scenario.n_players, d[:, i, j], r[:, i, j], prodFunc, scenario.riskFunc, scenario.csf)
+            problem = get_problem_from_scenario(scenario, (i, j))
             results[j, i] = solve(problem, method, options)
         end
     end
@@ -174,8 +178,8 @@ function solve_with_secondary_variation(
 end
 
 function get_params(scenario)
-    varying_param = transpose(getfield(scenario, scenario.varying_param))
-    n_steps = size(varying_param, 2)
+    varying = transpose(getfield(scenario, scenario.varying))
+    n_steps = size(varying, 2)
     
     A = similar(scenario.A, (scenario.n_players, n_steps))
     α = similar(scenario.α, (scenario.n_players, n_steps))
@@ -188,8 +192,8 @@ function get_params(scenario)
     # create stacks of variables to send to solver
     # everything needs to have shape n_players x n_steps
     for (newvar, symbol) in zip((A, α, B, β, θ, d, r), (:A, :α, :B, :β, :θ, :d, :r))
-        if symbol == scenario.varying_param
-            copy!(newvar, varying_param)
+        if symbol == scenario.varying
+            copy!(newvar, varying)
         else
             var = getfield(scenario, symbol)
             copy!(
@@ -207,7 +211,7 @@ function get_params(scenario)
 end
 
 function solve(scenario::Scenario, method::Symbol, options)
-    if !isnothing(scenario.secondary_varying_param)
+    if !isnothing(scenario.varying2)
         return solve_with_secondary_variation(
             scenario,
             method,
@@ -225,7 +229,7 @@ function solve(scenario::Scenario, method::Symbol, options)
     # send to solver
     Threads.@threads for i in 1:n_steps
         prodFunc = ProdFunc(A[:, i], α[:, i], B[:, i], β[:, i], θ[:, i])
-        problem = Problem(scenario.n_players, d[:, i], r[:, i], prodFunc, scenario.riskFunc, scenario.csf)
+        problem = get_problem_from_scenario(scenario, i)
         results[i] = solve(problem, method, options)
     end
 
@@ -246,7 +250,7 @@ function test_scenarios(method = :hybrid)
         α = [0.5, 0.75],
         θ = [0., 0.5],
         r = range(0.01, 0.1, length = Threads.nthreads()),
-        secondary_varying_param = :θ
+        varying2 = :θ
     )
 
     @time res = solve(scenario, method = method, verbose  = true)
