@@ -8,7 +8,7 @@ We assume that *n* players produce safety, *s*, and performance, *p*, as
 
 <div style="text-align: center">
 
-![s_i = A_i X_{s,i}^{\alpha_i} p_i^{-\theta_i}, \quad p_i = B_i X_{p,i}^{\beta_i}](https://latex.codecogs.com/svg.image?s_i&space;=&space;A_i&space;X_{s,i}^{\alpha_i}&space;p_i^{-\theta_i},&space;\quad&space;p_i&space;=&space;B_i&space;X_{p,i}^{\beta_i} "formula for p and s")
+$$s_i = A_i X_{s,i}^{\alpha_i} p_i^{-\theta_i}, \quad p_i = B_i X_{p,i}^{\beta_i}$$
 
 </div>
 
@@ -18,7 +18,7 @@ In a Nash equilibrium, each player *i* chooses *X<sub>s,i</sub>* and *X<sub>p,i<
 
 <div style="text-align: center">
 
-![u_i := \sigma(s, p) \rho_i(p) - \left( 1 - \sigma(s, p) \right) d_i - r_i(X_{i,s} + X_{i,p})](https://latex.codecogs.com/svg.image?u_i&space;:=&space;\sigma(s,&space;p)&space;\rho_i(p)&space;-&space;\left(&space;1&space;-&space;\sigma(s,&space;p)&space;\right)&space;d_i&space;-&space;r_i(X_{i,s}&space;&plus;&space;X_{i,p}) "formula for payoff")
+$$u_i := \sigma(s, p) \rho_i(p) - \left( 1 - \sigma(s, p) \right) d_i - r_i(X_{i,s} + X_{i,p})$$
 
 </div>
 
@@ -76,7 +76,7 @@ If you just want to solve and plot scenarios where some parameter value changes,
 The `ProdFunc.jl` file implements a `ProdFunc` (production function) type that contains the variables for the function
 <div style="text-align: center">
 
-![f(X_s, X_p) = (AX_s^\alpha (BX_p^\beta)^{-\theta},\ BX_p^\beta)](https://latex.codecogs.com/svg.image?f(X_s,&space;X_p)&space;=&space;(AX_s^\alpha&space;(BX_p^\beta)^{-\theta},\&space;BX_p^\beta) "formula for production function")
+$$f(X_s, X_p) = (AX_s^\alpha (BX_p^\beta)^{-\theta},\ BX_p^\beta)$$
 
 </div>
 
@@ -130,7 +130,7 @@ The `RiskFunc.jl` file implements a `RiskFunc` type, which represents the *σ* f
 
 <div style="text-align: center">
 
-![\sigma(s, p) = \prod_i \frac{s_i}{1+s_i}](https://latex.codecogs.com/svg.image?\sigma(s,&space;p)&space;=&space;\prod_i&space;\frac{s_i}{1&plus;s_i} "multiplicative risk function")
+$$\sigma(s, p) = \prod_i \frac{s_i}{1+s_i}$$
 
 </div>
 
@@ -140,7 +140,7 @@ If you don't like this assumption, you can change how the risk function is defin
 
 <div style="text-align: center">
 
-![\sigma(s, p) = \sum_i \left(\frac{p_i}{\sum_j p_j}\right) \left(\frac{s_i}{1+s_i}\right)](https://latex.codecogs.com/svg.image?\sigma(s,&space;p)&space;=&space;\sum_i&space;\left(\frac{p_i}{\sum_j&space;p_j}\right)&space;\left(\frac{s_i}{1&plus;s_i}\right) "winner-only risk function")
+$$\sigma(s, p) = \sum_i \left(\frac{p_i}{\sum_j p_j}\right) \left(\frac{s_i}{1+s_i}\right)$$
 
 </div>
 
@@ -168,7 +168,7 @@ The parameters correspond to the following definition of *ρ*:
 
 <div style="text-align: center">
 
-![\rho_i = (w + a_w) \cdot \frac{p_i}{\sum_j p_j} + (l + a_l) \left( 1 - \frac{p_i}{\sum_j p_j} \right)](https://latex.codecogs.com/svg.image?\rho_i&space;=&space;(w&space;&plus;&space;a_w)&space;\cdot&space;\frac{p_i}{\sum_j&space;p_j}&space;&plus;&space;(l&space;&plus;&space;a_l)&space;\left(&space;1&space;-&space;\frac{p_i}{\sum_j&space;p_j}&space;\right) "formula for CSF")
+$$\rho_i = (w + a_w) \cdot \frac{p_i}{\sum_j p_j} + (l + a_l) \left( 1 - \frac{p_i}{\sum_j p_j} \right)$$
 
 </div>
 
@@ -195,7 +195,7 @@ The `Problem.jl` file implements a `Problem` type that represents the payoff fun
 
 <div style="text-align: center">
 
-![u_i := \sigma(s, p) \rho_i(p) - \left( 1 - \sigma(s, p) \right) d_i - r_i(X_{i,s} + X_{i,p})](https://latex.codecogs.com/svg.image?u_i&space;:=&space;\sigma(s,&space;p)&space;\rho_i(p)&space;-&space;\left(&space;1&space;-&space;\sigma(s,&space;p)&space;\right)&space;d_i&space;-&space;r_i(X_{i,s}&space;&plus;&space;X_{i,p}) "formula for payoff").
+$$u_i := \sigma(s, p) \rho_i(p) - \left( 1 - \sigma(s, p) \right) d_i - r_i(X_{i,s} + X_{i,p})$$
 
 </div>
 

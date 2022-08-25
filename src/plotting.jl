@@ -478,7 +478,7 @@ function RecipesBase.plot(
 end
 
 function plot_result(res; kwargs...)
-    println("Warning: `plot_result` is deprecated. Use `get_plots` instead.")
+    println("Warning: `plot_result` is deprecated. Use `plot` instead.")
     return plot(res; kwargs...)
 end
 
