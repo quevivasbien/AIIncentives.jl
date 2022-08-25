@@ -1,3 +1,42 @@
+@doc raw"""
+The `Problem.jl` file implements a `Problem` type that represents the payoff function
+
+$$u_i := \sum_{j=1}^n \sigma_j(s) q_j(p) \rho_{ij}(p) - \left( 1 - \sum_{j=1}^n \sigma_j(s) q_j(p) \right) d_i - r_i(X_{i,s} + X_{i,p})$$
+
+You can construct a `Problem` like this:
+```julia
+problem = Problem(
+    n_players = 2,  # default is 2
+    d = 1.,
+    r = 0.05,
+    prodFunc = yourProdFunc,
+    riskFunc = yourRiskFunc,  # default is WinnerOnlyRisk()
+    csf = yourCSF,  # default is BasicCSF()
+    payoffFunc = yourPayoffFunc  # default is LinearPayoff(1, 0, 0, 0)
+)
+```
+Note that the lengths of `d` and `r` must match and be equal to `n` and `prodFunc.n_players`. Again, you can omit arguments to use default values or provide vectors instead of scalars if you want different values for each player.
+
+To calculate the payoffs for all the players, you can do
+```julia
+payoffs = payoffs(problem, Xs, Xp)
+```
+or
+```julia
+payoffs = problem(Xs, Xp)
+```
+
+and for just player `i`,
+```julia
+payoff_i = payoff(problem, i, Xs, Xp)
+```
+or
+```julia
+payoff_i = problem(i, Xs, Xp)
+```
+
+(Note that in the above, `Xs` and `Xp` are vectors of length `problem.n`.)
+"""
 struct Problem{T <: Real, R <: RiskFunc, C <: CSF, P <: PayoffFunc}
     n::Int
     d::Vector{T}
@@ -16,7 +55,7 @@ function Problem(
     riskFunc::RiskFunc = WinnerOnlyRisk(),
     prodFunc::ProdFunc{Float64} = ProdFunc(),
     csf::CSF = BasicCSF(),
-    payoffFunc::PayoffFunc = LinearPayoff(0., 1., 0., 0.)
+    payoffFunc::PayoffFunc = LinearPayoff()
 )
     @assert n >= 2 "n must be at least 2"
     @assert n == prodFunc.n "n must match prodFunc.n"
@@ -46,7 +85,7 @@ end
 
 (problem::Problem)(i::Int, Xs::Vector, Xp::Vector) = payoff(problem, i, Xs, Xp)
 
-function all_payoffs_with_s_p(problem::Problem, Xs::Vector, Xp::Vector, s::Vector, p::Vector)
+function payoffs_with_s_p(problem::Problem, Xs::Vector, Xp::Vector, s::Vector, p::Vector)
     proba_win = problem.csf(p)  # probability that each player wins
     # construct matrix of payoffs
     pf_lose = payoff_lose.(Ref(problem.payoffFunc), p)  # payoff if each player loses
@@ -58,12 +97,12 @@ function all_payoffs_with_s_p(problem::Problem, Xs::Vector, Xp::Vector, s::Vecto
     return vec(sum(payoffs .* cond_σ, dims = 2)) .- (1 .- sum(cond_σ)) .* problem.d .- problem.r .* (Xs .+ Xp)
 end
 
-function all_payoffs(problem::Problem, Xs::Vector, Xp::Vector)
+function payoffs(problem::Problem, Xs::Vector, Xp::Vector)
     (s, p) = problem.prodFunc(Xs, Xp)
-    return all_payoffs_with_s_p(problem, Xs, Xp, s, p)
+    return payoffs_with_s_p(problem, Xs, Xp, s, p)
 end
 
-(problem::Problem)(Xs::Vector, Xp::Vector) = all_payoffs(problem, Xs, Xp)
+(problem::Problem)(Xs::Vector, Xp::Vector) = payoffs(problem, Xs, Xp)
 
 function get_func(problem::Problem, i::Int, strats::Array)
     strats_ = copy(strats)

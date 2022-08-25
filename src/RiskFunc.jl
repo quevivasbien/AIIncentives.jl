@@ -1,20 +1,23 @@
 """
 A type that controls the probability of a safe outcome
-Subtypes must implement function `σ(rf, p)` and `σ(rf, i, p)`
+Subtypes must implement functions `σ(rf, p)` and `σ(rf, i, p)`
 """
 abstract type RiskFunc end
 
+
+"Returns vector of probabilies: proba(safe) conditional on each player winning"
 (rf::RiskFunc)(
     s::AbstractVector{T}
 ) where {T <: Real} = σ(rf, s)
 
+"Returns proba(safe) conditional on player i winning"
 (rf::RiskFunc)(
     i::Int,
     s::AbstractVector{T}
 ) where {T <: Real} = σ(rf, i, s)
 
 """
-Proba(safe) is weighted geometric mean of s / (1+s), to the nth power
+Defines proba(safe) as weighted geometric mean of s / (1+s), to the nth power
 w is vector of weights
 if w is all ones, proba(safe) is simply the product of s / (1+s)
 """
@@ -56,7 +59,7 @@ end
 
 
 """
-Proba(safe) is weighted arithmetic mean of s / (1+s)
+Defines proba(safe) as weighted arithmetic mean of s / (1+s)
 w is vector of weights
 if w is all ones, the proba(safe) is simply mean of s / (1+s)
 """
@@ -96,7 +99,7 @@ function σ(
 end
 
 """
-Proba(safe) is probability that the winner is safe
+Defines proba(safe) as probability that the winner is safe
 """
 struct WinnerOnlyRisk <: RiskFunc end
 

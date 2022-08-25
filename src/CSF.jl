@@ -4,10 +4,12 @@ Subtypes must implement `proba_win(p)` and `proba_win(i, p)`
 """
 abstract type CSF end
 
+"Returns vector of probabilies that each player wins"
 (csf::CSF)(
     p::AbstractVector{T}
 ) where {T <: Real} = proba_win(csf, p)
 
+"Returns proba that player i wins"
 (csf::CSF)(
     i::Int,
     p::AbstractVector{T}

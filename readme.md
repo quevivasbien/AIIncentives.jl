@@ -4,25 +4,25 @@
 
 The code in this repository is meant to find Nash equilibria for the following model:
 
-We assume that *n* players produce safety, *s*, and performance, *p*, as
-
-<div style="text-align: center">
+We assume that $n$ players produce safety, $s$, and performance, $p$, as
 
 $$s_i = A_i X_{s,i}^{\alpha_i} p_i^{-\theta_i}, \quad p_i = B_i X_{p,i}^{\beta_i}$$
 
-</div>
+for $i = 1, ..., n$. The $X$ are inputs chosen by the players, and all other variables are fixed parameters.
 
-for *i = 1, ..., n*. The *X* are inputs chosen by the players, and all other variables are fixed parameters.
+In a Nash equilibrium, each player $i$ chooses $X_{s,i}$ and $X_{p,i}$ to maximize the payoff
 
-In a Nash equilibrium, each player *i* chooses *X<sub>s,i</sub>* and *X<sub>p,i</sub>* to maximize the payoff
+$$u_i := \sum_{j=1}^n \sigma_j(s) q_j(p) \rho_{ij}(p) - \left( 1 - \sum_{j=1}^n \sigma_j(s) q_j(p) \right) d_i - r_i(X_{i,s} + X_{i,p})$$
 
-<div style="text-align: center">
+subject to the other players' choices of $X_s$ and $X_p$. The components of this expression will be explained more below, but the basic parts are as follows:
 
-$$u_i := \sigma(s, p) \rho_i(p) - \left( 1 - \sigma(s, p) \right) d_i - r_i(X_{i,s} + X_{i,p})$$
+* $q_i(p)$ is the probability that player $i$ wins a contest between all players.
+* $\sigma_i(s)$ is the probability of a safe outcome given that player $i$ wins the contest.
+* $\rho_{ij}(p)$ is player $i$'s payoff if player $j$ wins the contest, and the outcome is safe.
+* $d_i$ is the cost incurred by player $i$ in the event of an unsafe (disaster) outcome.
+* $r_i$ is the price that player $i$ pays for each unit of $X_{i,\cdot}$.
 
-</div>
-
-subject to the other players' choices of *X<sub>s</sub>* and *X<sub>p</sub>*. Here *σ* is a "risk function" that determines the probability of a safe outcome (no disaster), *ρ<sub>i</sub>* is a contest success function (the expected payoff for player *i* given a safe outcome and a vector of performances *p*), and *d<sub>i</sub>* is the damage incurred by player *i* in the event of a disaster.
+Note that the weighted sum $\sum_i \sigma_i q_i$ is the unconditional probability of a safe outcome (no disaster). 
 
 ## Getting started
 
@@ -30,17 +30,21 @@ If you don't have Julia, download it from https://julialang.org/downloads/ and i
 ```
 ] add Optim, NLsolve, Plots
 ```
-Those dependencies will now be installed, so you won't have to repeat that last step in the future.
+(You need to type the left square brace, as that denotes that you want to enter Pkg mode.) Those dependencies will now be installed, so you won't have to repeat that last step in the future.
 
 At this point, the easiest way to load the project code is to open a new Julia session in the project directory -- from your computer's terminal, navigate to the project directory and run:
 ```bash
-~/path/to/AIIncentives$ julia --project --threads=auto
-
-julia> using AIIncentives
+/path/to/AIIncentives.jl$ julia --project --threads=auto
 ```
+or, from an arbitrary directory,
+```bash
+/any/dir$ julia --project=/path/to/AIIncentives.jl --threads=auto
+```
+where `/path/to/AIIncentives.jl`, is of course the directory where you've cloned this repository.
+
 (The `--project` flag allows you to import the project with the `using` keyword, and the `--threads=auto` flag allows Julia to use all of your computer's CPU cores, which can speed some tasks up significantly.)
 
-You will then be able to use the project code. If this is the first time you do this, there will be a bit of delay as it precompiles some of the code.
+Then, to load the project code, just run `using AIIncentives` in your new Julia session. If this is the first time you do this, there will be a bit of delay as it precompiles some of the code.
 
 You can then create and solve a scenario like
 ```julia
@@ -65,22 +69,19 @@ This will find Nash equilibria over the given parameterization and range of valu
 plot(solution)
 ```
 
-The first time you run something in the Julia session, it will take a while, since Julia compiles your code the first time you run it in a new setting. It should run a lot faster after that. Because of this, I recommend working within a Julia REPL session or a Jupyter notebook.
+The first time you run something in the Julia session, it will take a while, since Julia compiles your code the first time you run it in a new setting. It should run a lot faster after that.
 
-If you just want to solve and plot scenarios where some parameter value changes, you can skip now to the section on the `Scenario` type. Otherwise, keep reading in a linear fashion.
+If you just want to solve and plot scenarios where some parameter value changes, you can skip now to the section on the `Scenario` type. Otherwise, if you want to understand the code at a more fundamental level, keep reading in a linear fashion.
 
 ## Base types
 
 ### The `ProdFunc` type
 
 The `ProdFunc.jl` file implements a `ProdFunc` (production function) type that contains the variables for the function
-<div style="text-align: center">
 
 $$f(X_s, X_p) = (AX_s^\alpha (BX_p^\beta)^{-\theta},\ BX_p^\beta)$$
 
-</div>
-
-describing how the inputs *X<sub>s</sub>* and *X<sub>p</sub>* produce safety and performance for all players. You can create an instance of the `ProdFunc` type like
+describing how the inputs $X_s$ and $X_p$ produce safety and performance for all players. You can create an instance of the `ProdFunc` type like
 ```julia
 prodFunc = ProdFunc(
     n_players = 2,
@@ -122,82 +123,53 @@ or, equivalently,
 ```
 where `xs` and `xp` are both scalar values; the outputs `s` and `p` will also be scalar.
 
-You can also compute the Jacobian of `f` as `df`.
-
 ### The `RiskFunc` type
 
-The `RiskFunc.jl` file implements a `RiskFunc` type, which represents the *σ* function in the model. The default risk function is the `MultiplicativeRisk` defined as:
+The `RiskFunc.jl` file implements a `RiskFunc` type, which represents $σ_i$ in the model (the probability of a safe outcome given that player $i$ is the contest winner). The default risk function is `WinnerOnlyRisk`, which defines:
 
-<div style="text-align: center">
+$$\sigma_i(s) = \frac{s_i}{1+s_i}$$
 
-$$\sigma(s, p) = \prod_i \frac{s_i}{1+s_i}$$
+That is, the probability of a safe outcome is determined entirely by the safety $s$ of whoever wins the contest, with $s_i$ interpreted as the *odds* of a safe outcome, given that player $i$ wins the contest.
 
-</div>
 
-The interpretation is that each *s<sub>i</sub>* represents the *odds* that player *i* causes a disaster, with players' chances of causing a disaster independently distributed, and *σ* being the probability that *no player* causes a disaster.
+If you don't like this assumption, you can change how the risk function is defined. Some options are pre-defined in `RiskFunc.jl`, with another reasonable option being `MultiplicativeRisk`, which defines, for some vector of weights $w$:
 
-If you don't like this assumption, you can change how the risk function is defined. Some options are pre-defined in `RiskFunc.jl`, with another reasonable option being the `WinnerOnlyRisk`, defined as:
+$$\sigma_i(s) = \left[ \prod_j \left(\frac{s_j}{1+s_j}\right)^{w_j} \right]^{n/\sum_j w_j}$$
 
-<div style="text-align: center">
+That is, the probability of a safe outcome is, regardless of who wins the contest, $n$ times the weighted geometric average of each player's individual probability $s_i / (1+s_i)$. If $w_i$ is the same for all players, then this is just
 
-$$\sigma(s, p) = \sum_i \left(\frac{p_i}{\sum_j p_j}\right) \left(\frac{s_i}{1+s_i}\right)$$
+$$\sigma_i(s) = \prod_j \left(\frac{s_j}{1+s_j}\right),$$
 
-</div>
+which we can interpret as the case where each player has an *independent* probability $1 / (1+s_i)$ of causing a disaster, and $\sigma_i$ is the probability that no player causes a disaster.
 
-This represents the assumption that only the winning player can cause a disaster (where one's probability of winning is one's performance divided by the sum of everyone's performance).
+There is also an `AdditiveRisk` option implemented, which defines:
+
+$$\sigma_i(s) = \frac{\sum_j w_j \left(\frac{s_j}{1+s_j}\right)}{\sum_j w_j}$$
 
 ### The `CSF` type
 
-The `CSF.jl` file implements a `CSF` (contest success function) type, which represents the *ρ* function in the model. The constructor takes four parameters, like in the following example:
+The `CSF.jl` file implements a `CSF` (contest success function) type, which represents $q_i$ in the model (the probability that player $i$ wins the contest). The only version currently implemented is `BasicCSF`, which defines:
 
-```julia
-csf = CSF(
-    1.,  # w
-    0.,  # l
-    0.,  # a_w
-    0.  # a_l
-)
-```
+$$q_i(p) = \frac{p_i}{\sum_j p_j}$$
 
-You can also provide all parameters as keyword arguments, in which case any excluded parameters will be set to default values. That is, the following is equivalent to the above:
-```julia
-csf = CSF(w = 1., l = 0., a_w = 0., a_l = 0.)
-```
+### The `PayoffFunc` type
 
-The parameters correspond to the following definition of *ρ*:
+The `PayoffFunc.jl` files implements a `PayoffFunc` type, which represents $\rho_{ij}$ in the model (the payoff that player $i$ gets if player $j$ wins the contest, and the outcome is safe). The only version currently implemented is `LinearPayoff`, which defines
 
-<div style="text-align: center">
+$$\rho_{ij}(p) = \begin{cases}
+    a_w + b_w p, & i = j \\
+    a_l + b_l p, & i \neq j
+\end{cases}$$
 
-$$\rho_i = (w + a_w) \cdot \frac{p_i}{\sum_j p_j} + (l + a_l) \left( 1 - \frac{p_i}{\sum_j p_j} \right)$$
+for constants $a_w$, $b_w$, $a_l$, and $b_l$.
 
-</div>
-
-To get the rewards for all players given a vector of performance `p`, you can do
-```julia
-rewards = all_rewards(csf, p)
-```
-or just
-```julia
-rewards = csf(p)
-```
-and to get the reward for just a single player, indexed by `i`,
-```julia
-reward_for_player_i = reward(csf, i, p)
-```
-or just
-```julia
-reward_for_player_i = csf(i, p)
-```
+As a default, it is assumed that $a_w = 1$ and $b_w = a_l = b_l = 0$, so a player gets a payoff of 1 if they win, and a payoff of zero otherwise.
 
 ### The `Problem` type
 
 The `Problem.jl` file implements a `Problem` type that represents the payoff function
 
-<div style="text-align: center">
-
-$$u_i := \sigma(s, p) \rho_i(p) - \left( 1 - \sigma(s, p) \right) d_i - r_i(X_{i,s} + X_{i,p})$$
-
-</div>
+$$u_i := \sum_{j=1}^n \sigma_j(s) q_j(p) \rho_{ij}(p) - \left( 1 - \sum_{j=1}^n \sigma_j(s) q_j(p) \right) d_i - r_i(X_{i,s} + X_{i,p})$$
 
 You can construct a `Problem` like this:
 ```julia
@@ -206,19 +178,29 @@ problem = Problem(
     d = 1.,
     r = 0.05,
     prodFunc = yourProdFunc,
-    riskFunc = yourRiskFunc,  # default is MultiplicativeRisk(n_players)
-    csf = yourCSF  # default is CSF(1, 0, 0, 0)
+    riskFunc = yourRiskFunc,  # default is WinnerOnlyRisk()
+    csf = yourCSF,  # default is BasicCSF()
+    payoffFunc = yourPayoffFunc  # default is LinearPayoff(1, 0, 0, 0)
 )
 ```
 Note that the lengths of `d` and `r` must match and be equal to `n` and `prodFunc.n_players`. Again, you can omit arguments to use default values or provide vectors instead of scalars if you want different values for each player.
 
 To calculate the payoffs for all the players, you can do
 ```julia
-payoffs = all_payoffs(problem, Xs, Xp)
+payoffs = payoffs(problem, Xs, Xp)
 ```
-and for just player `i`:
+or
 ```julia
-payoff_for_player_i = payoff(problem, i, Xs, Xp)
+payoffs = problem(Xs, Xp)
+```
+
+and for just player `i`,
+```julia
+payoff_i = payoff(problem, i, Xs, Xp)
+```
+or
+```julia
+payoff_i = problem(i, Xs, Xp)
 ```
 
 (Note that in the above, `Xs` and `Xp` are vectors of length `problem.n`.)
@@ -227,7 +209,7 @@ payoff_for_player_i = payoff(problem, i, Xs, Xp)
 
 The `solve.jl` file contains several methods for finding Nash equilibria for a given problem. You can call all of these using the `solve` function, which takes a problem and optional keyword arguments and returns a `SolverResult` (which is basically just a container for the equilibrium values of safety, performance, and payoffs, plus an indicator for whether the solver converged successfully).
 
-By default, `solve(problem)` will find a pure strategy solution for `problem` using a method of iterating on players' best responses: it starts with an arbitrary choice of *X<sub>s</sub>* and *X<sub>p</sub>* and at each iteration figures out the choice of strategy for each player that will maximize their payoff given the others' strategies. When the best-response strategies stop changing significantly at each iteration, we've reached a Nash equilibrium. You can also explicitly specify that you want to use this method by calling:
+By default, `solve(problem)` will find a pure strategy solution for `problem` using a method of iterating on players' best responses: it starts with an arbitrary choice of $X_s$ and $X_p$ and at each iteration figures out the choice of strategy for each player that will maximize their payoff given the others' strategies. When the best-response strategies stop changing significantly at each iteration, we've reached a Nash equilibrium. You can also explicitly specify that you want to use this method by calling:
 ```julia
 solve(problem, method = :iters)
 ```
@@ -248,7 +230,7 @@ The other methods you can use are the following:
 
 * `method = :scatter` runs the iterating method with multiple, randomly-selected, starting points. The returned `SolverResult` will contain the solutions from each of those starting points. (Ideally, the solutions should all be the same.) This is typically just helpful for figuring out if solutions are sensitive to the starting point.
 
-* `method = :mixed` runs a variation of the iterating method that attempts to maximize the best responses over a *history* of strategies. If the size of that history is large enough and the solver is run for enough iterations, the result should be a sample from a mixed strategy Nash equilibrium. You can control the history size by setting the `n_points` keyword argument. For example,
+* `method = :mixed` runs a variation of the iterating method that attempts to maximize the best responses over a $history$ of strategies. If the size of that history is large enough and the solver is run for enough iterations, the result should be a sample from a mixed strategy Nash equilibrium. You can control the history size by setting the `n_points` keyword argument. For example,
     ```julia
     solve(problem, method = :mixed, n_points = 100)
     ```
@@ -309,14 +291,14 @@ scenario = Scenario(
 ```
 gives us a scenario where player 1 has A = 10, and player 2 has A = 20.
 
-You can also supply `riskFunc` and `csf` arguments to the scenario constructor if you want to use something other than the defaults, e.g.:
+You can also supply `riskFunc`, `csf`, and `payoffFunc` arguments to the scenario constructor if you want to use something other than the defaults, e.g.:
 ```julia
 scenario = Scenario(
     n_players = 2,
     r = range(0.01, 0.1, length = 20),
     varying = :r,
     riskFunc = WinnerOnlyRisk(),
-    csf = CSF(1, 0, 0.01, 0.01)
+    payoffFunc = LinearPayoff(1., 0.1, 0., 0.)
 )
 ```
 
@@ -357,4 +339,12 @@ plot(
 )
 ```
 
-The `plot` method will return a plot object that you can edit with the `Plots.jl` package. This plot will have 6 subplots, but if you only want one of those subplots, you can use `get_plots` instead of `plot` to get a list of those subplots.
+The `plot` method will return a plot object that you can edit with the `Plots.jl` package. This plot will have 6 subplots, but if you only want one of those subplots, you can use `get_plots` instead of `plot` to get a list of those subplots. For example, if we want just the plot of the probability-weighted $\sigma$, we can run
+```julia
+get_plots(result)[5]
+```
+and if we want to change the formatting, we can do that with the typical `Plots.jl` API. For example,
+```julia
+plot!(plot_title = "Some fantastic plots", xlabel = "a new label for the x axis")
+```
+would change the title and x-axis label for the most recently created plot.
