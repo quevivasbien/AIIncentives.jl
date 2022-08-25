@@ -15,10 +15,15 @@ struct LinearPayoff{T <: Real} <: PayoffFunc
     b_lose::T
 end
 
+function LinearPayoff(; a_win::Real = 1., b_win::Real = 0., a_lose::Real = 0., b_lose::Real = 0.)
+    @assert typeof(a_win) == typeof(b_win) == typeof(a_lose) == typeof(b_lose) "Params for LinearPayoff need to have same numeric type"
+    return LinearPayoff(a_win, b_win, a_lose, b_lose)
+end
+
 function payoff_win(pf::LinearPayoff, p::Real)
-    return pf.a_win * p + pf.b_win
+    return pf.a_win + p * pf.b_win
 end
 
 function payoff_lose(pf::LinearPayoff, p::Real)
-    return pf.a_lose * p + pf.b_lose
+    return pf.a_lose + p * pf.b_lose
 end

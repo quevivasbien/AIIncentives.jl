@@ -24,7 +24,7 @@ end
 function verify(problem, strat, options)
     Xs = strat[:, 1]
     Xp = strat[:, 2]
-    payoffs = all_payoffs(problem, Xs, Xp)
+    payoffs = payoffs(problem, Xs, Xp)
     if (
         is_symmetric(problem)
         && !all(isapprox.(payoffs[1], payoffs[2:problem.n], rtol = sqrt(options.tol)))

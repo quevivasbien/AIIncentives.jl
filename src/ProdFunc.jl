@@ -1,3 +1,50 @@
+@doc raw"""
+The `ProdFunc.jl` file implements a `ProdFunc` (production function) type that contains the variables for the function
+
+$$f(X_s, X_p) = (AX_s^\alpha (BX_p^\beta)^{-\theta},\ BX_p^\beta)$$
+
+describing how the inputs $X_s$ and $X_p$ produce safety and performance for all players. You can create an instance of the `ProdFunc` type like
+```julia
+prodFunc = ProdFunc(
+    n_players = 2,
+    A = 10.,
+    α = 0.5,
+    B = 10.,
+    β = 0.5,
+    θ = 0.25
+)
+```
+If you want to supply different parameters for each player or just like typing more stuff out, you can also supply the parameters as vectors of equal length (equal to `n_players`). The following creates the same object as the example above:
+```julia
+prodFunc = ProdFunc(
+    n_players = 2,
+    A = [10., 10.],
+    α = [0.5, 0.5],
+    B = [10., 10.],
+    β = [0.5, 0.5],
+    θ = [0.25, 0.25]
+)
+```
+If you omit a keyword argument, it will be set at a default value.
+
+To determine the outputs for all players, you can do
+```julia
+(s, p) = f(prodFunc, Xs, Xp)
+```
+or, equivalently,
+```julia
+(s, p) = prodFunc(Xs, Xp)
+```
+where `Xs` and `Xp` are vectors of length equal to `prodFunc.n_players`. Here `s` and `p` will be vectors representing the safety and performance of each player. To get the safety and performance of a single player with index `i`, just do
+```julia
+(s, p) = f(prodFunc, i, xs, xp)
+```
+or, equivalently,
+```julia
+(s, p) = prodFunc(i, xs, xp)
+```
+where `xs` and `xp` are both scalar values; the outputs `s` and `p` will also be scalar.
+"""
 struct ProdFunc{T <: Real}
     n::Int
     A::Vector{T}

@@ -29,7 +29,7 @@ export
 
     f,
     payoff,
-    all_payoffs,
+    payoffs,
     reward,
     all_rewards
 

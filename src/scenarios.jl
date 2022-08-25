@@ -35,7 +35,7 @@ function Scenario(
     r::Union{Real, AbstractArray} = 0.01:0.01:0.1,
     riskFunc::RiskFunc = WinnerOnlyRisk(),
     csf::CSF = BasicCSF(),
-    payoffFunc::PayoffFunc = LinearPayoff(0., 1., 0., 0.),
+    payoffFunc::PayoffFunc = LinearPayoff(),
     varying::Symbol = :r,
     varying2::Union{Symbol, Nothing} = nothing,
     varying_param = nothing,
