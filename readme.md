@@ -34,11 +34,11 @@ If you don't have Julia, download it from https://julialang.org/downloads/ and i
 
 At this point, the easiest way to load the project code is to open a new Julia session in the project directory -- from your computer's terminal, navigate to the project directory and run:
 ```bash
-/path/to/AIIncentives.jl* julia --project --threads=auto
+/path/to/AIIncentives.jl$ julia --project --threads=auto
 ```
 or, from an arbitrary directory,
 ```bash
-/any/dir* julia --project=/path/to/AIIncentives.jl --threads=auto
+/any/dir$ julia --project=/path/to/AIIncentives.jl --threads=auto
 ```
 where `/path/to/AIIncentives.jl`, is of course the directory where you've cloned this repository.
 
@@ -187,7 +187,7 @@ Note that the lengths of `d` and `r` must match and be equal to `n` and `prodFun
 
 To calculate the payoffs for all the players, you can do
 ```julia
-payoffs = payoffs(problem, Xs, Xp)
+payoffs = get_payoffs(problem, Xs, Xp)
 ```
 or
 ```julia
@@ -196,7 +196,7 @@ payoffs = problem(Xs, Xp)
 
 and for just player `i`,
 ```julia
-payoff_i = payoff(problem, i, Xs, Xp)
+payoff_i = get_payoff(problem, i, Xs, Xp)
 ```
 or
 ```julia

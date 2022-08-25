@@ -497,7 +497,7 @@ function plot_payoffs_with_xs(
     function f(xp)
         Xp_ = copy(vec(base_Xp))
         Xp_[i] = xp
-        payoff(problem, i, vec(base_Xs), Xp_)
+        get_payoff(problem, i, vec(base_Xs), Xp_)
     end
     plot(Xp, f, xlabel = "Xₚ", ylabel = "payoff", legend = nothing)
     scatter!([base_Xp[i]], [f(base_Xp[i])])
@@ -517,7 +517,7 @@ function plot_payoffs_with_xp(
     function f(xs)
         Xs_ = copy(vec(base_Xs))
         Xs_[i] = xs
-        payoff(problem, i, Xs_, vec(base_Xp))
+        get_payoff(problem, i, Xs_, vec(base_Xp))
     end
     plot(Xs, f, xlabel = "Xₛ", ylabel = "payoff", legend = nothing)
     scatter!([base_Xs[i]], [f(base_Xs[i])])
@@ -545,7 +545,7 @@ function plot_payoffs(
     function f(xs, xp)
         Xs_ = copy(vec(base_Xs)); Xp_ = copy(vec(base_Xp))
         Xs_[i] = xs; Xp_[i] = xp
-        payoff(problem, i, Xs_, Xp_)
+        get_payoff(problem, i, Xs_, Xp_)
     end
     heatmap(Xs, Xp, f, xlabel = "Xₛ", ylabel = "Xₚ")
     scatter!([base_Xs[i]], [base_Xp[i]], legend = nothing)

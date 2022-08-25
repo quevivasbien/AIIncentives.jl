@@ -24,7 +24,7 @@ end
 function verify(problem, strat, options)
     Xs = strat[:, 1]
     Xp = strat[:, 2]
-    payoffs = payoffs(problem, Xs, Xp)
+    payoffs = get_payoffs(problem, Xs, Xp)
     if (
         is_symmetric(problem)
         && !all(isapprox.(payoffs[1], payoffs[2:problem.n], rtol = sqrt(options.tol)))
@@ -52,10 +52,10 @@ function verify(problem, strat, options)
         lower_Xs = setindex!(copy(Xs), Xs[i] * options.verify_mult, i)
         lower_Xp = setindex!(copy(Xp), Xp[i] * options.verify_mult, i)
 
-        payoff_higher_Xs = payoff(problem, i, higher_Xs, Xp)
-        payoff_higher_Xp = payoff(problem, i, Xs, higher_Xp)
-        payoff_lower_Xs = payoff(problem, i, lower_Xs, Xp)
-        payoff_lower_Xp = payoff(problem, i, Xs, lower_Xp)
+        payoff_higher_Xs = get_payoff(problem, i, higher_Xs, Xp)
+        payoff_higher_Xp = get_payoff(problem, i, Xs, higher_Xp)
+        payoff_lower_Xs = get_payoff(problem, i, lower_Xs, Xp)
+        payoff_lower_Xp = get_payoff(problem, i, Xs, lower_Xp)
         
         mirror_Xs = setindex!(
             copy(Xs),
@@ -67,7 +67,7 @@ function verify(problem, strat, options)
             (sum(Xp) - Xp[i]) / (length(Xp) - 1),
             i
         )
-        payoff_mirror = payoff(problem, i, mirror_Xs, mirror_Xp)
+        payoff_mirror = get_payoff(problem, i, mirror_Xs, mirror_Xp)
         if any(is_napprox_greater.(
             (
                 payoff_higher_Xs,

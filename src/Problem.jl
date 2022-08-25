@@ -19,7 +19,7 @@ Note that the lengths of `d` and `r` must match and be equal to `n` and `prodFun
 
 To calculate the payoffs for all the players, you can do
 ```julia
-payoffs = payoffs(problem, Xs, Xp)
+payoffs = get_payoffs(problem, Xs, Xp)
 ```
 or
 ```julia
@@ -28,7 +28,7 @@ payoffs = problem(Xs, Xp)
 
 and for just player `i`,
 ```julia
-payoff_i = payoff(problem, i, Xs, Xp)
+payoff_i = get_payoff(problem, i, Xs, Xp)
 ```
 or
 ```julia
@@ -72,7 +72,7 @@ function Problem(
     return problem
 end
 
-function payoff(problem::Problem, i::Int, Xs::Vector, Xp::Vector)
+function get_payoff(problem::Problem, i::Int, Xs::Vector, Xp::Vector)
     (s, p) = problem.prodFunc(Xs, Xp)
     proba_win = problem.csf(p)  # probability that each player wins
     pf_lose = payoff_lose(problem.payoffFunc, p[i])  # payoff if player i loses
@@ -83,7 +83,7 @@ function payoff(problem::Problem, i::Int, Xs::Vector, Xp::Vector)
     return sum(payoffs .* cond_σ) - (1 - sum(cond_σ)) * problem.d[i] - problem.r[i] .* (Xs[i] + Xp[i])
 end
 
-(problem::Problem)(i::Int, Xs::Vector, Xp::Vector) = payoff(problem, i, Xs, Xp)
+(problem::Problem)(i::Int, Xs::Vector, Xp::Vector) = get_payoff(problem, i, Xs, Xp)
 
 function payoffs_with_s_p(problem::Problem, Xs::Vector, Xp::Vector, s::Vector, p::Vector)
     proba_win = problem.csf(p)  # probability that each player wins
@@ -97,18 +97,18 @@ function payoffs_with_s_p(problem::Problem, Xs::Vector, Xp::Vector, s::Vector, p
     return vec(sum(payoffs .* cond_σ, dims = 2)) .- (1 .- sum(cond_σ)) .* problem.d .- problem.r .* (Xs .+ Xp)
 end
 
-function payoffs(problem::Problem, Xs::Vector, Xp::Vector)
+function get_payoffs(problem::Problem, Xs::Vector, Xp::Vector)
     (s, p) = problem.prodFunc(Xs, Xp)
     return payoffs_with_s_p(problem, Xs, Xp, s, p)
 end
 
-(problem::Problem)(Xs::Vector, Xp::Vector) = payoffs(problem, Xs, Xp)
+(problem::Problem)(Xs::Vector, Xp::Vector) = get_payoffs(problem, Xs, Xp)
 
 function get_func(problem::Problem, i::Int, strats::Array)
     strats_ = copy(strats)
     function func(x)
         strats_[i, :] = x
-        return -payoff(problem, i, strats_[:, 1], strats_[:, 2])
+        return -get_payoff(problem, i, strats_[:, 1], strats_[:, 2])
     end
 end
 
