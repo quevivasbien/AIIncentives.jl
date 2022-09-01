@@ -240,19 +240,3 @@ function solve(scenario::Scenario; method::Symbol = :iters, kwargs...)
     options = SolverOptions(SolverOptions(); kwargs...)
     return solve(scenario, method::Symbol, options)
 end
-
-
-function test_scenarios(method = :hybrid)
-    println("Running test on `scenarios.jl`...")
-
-    scenario = Scenario(
-        n_players = 2,
-        α = [0.5, 0.75],
-        θ = [0., 0.5],
-        r = range(0.01, 0.1, length = Threads.nthreads()),
-        varying2 = :θ
-    )
-
-    @time res = solve(scenario, method = method, verbose  = true)
-    plot(res)
-end

@@ -155,7 +155,7 @@ function suggest_iter_strat(problem, init_guess, options)
 end
 
 function solve_iters(
-    problem::Problem,
+    problem,
     init_guess::Array,
     options = SolverOptions()
 )
@@ -176,7 +176,7 @@ function solve_iters(
 end
 
 function solve_iters(
-    problem::Problem,
+    problem,
     options = SolverOptions()
 )
     return solve_iters(problem, fill(options.init_guess, (problem.n, 2)), options)
@@ -359,7 +359,7 @@ function solve(problem::Problem, method::Symbol, options)
 end
 
 function solve(
-    problem::Problem;
+    problem::AbstractProblem;
     method::Symbol = :iters,
     kwargs...
 )
@@ -367,25 +367,21 @@ function solve(
     return solve(problem, method::Symbol, options)
 end
 
+## Variation of solver for ProblemWithBeliefs
+# Just need to have single_iter_for_i use each player's beliefs
 
-function test_solve()
-    println("Running test on `solve.jl`...")
-    prodFunc = ProdFunc([10., 10.], [0.5, 0.5], [10., 10.], [0.5, 0.5], [0.25, 0.25])
-    riskFunc = MultiplicativeRisk(2)
-    csf = CSF(1., 0., 0., 0.)
-    problem = Problem(2, [1., 1.], [0.01, 0.01], riskFunc, prodFunc, csf)
-    options = SolverOptions(verbose = true)
-    println("With `solve_iters`:")
-    @time solve_iters_sol = solve_iters(problem, options)
-    print(solve_iters_sol)
-    println("With `solve_roots`:")
-    @time solve_roots_sol = solve_roots(problem, options)
-    print(solve_roots_sol)
-    println("With `solve_mixed`:")
-    @time solve_mixed_sol = solve_mixed(problem, options)
-    print(solve_mixed_sol)
-    println("With `solve_hybrid`:")
-    @time solve_hybrid_sol = solve_hybrid(problem, options)
-    print(solve_hybrid_sol)
-    return
+function solve_single_iter(
+    problem::ProblemWithBeliefs, strat::Array,
+    options = SolverOptions()
+)
+    new_strats = similar(strat)
+    for i in 1:problem.n
+        new_strats[i, :] = single_iter_for_i(problem.beliefs[i], strat, i, strat[i, :], options)
+    end
+    return new_strats
+end
+
+function solve(problem::ProblemWithBeliefs, method::Symbol, options)
+    @assert method == :iters "Currently only :iters is supported when solving ProblemWithBeliefs"
+    solve_iters(problem, options)
 end

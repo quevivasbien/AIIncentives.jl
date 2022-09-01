@@ -28,15 +28,7 @@ function prune_duplicates(results::Vector{SolverResult}; atol = 1e-6, rtol=5e-2)
     return results[unique]
 end
 
-function get_s_p_σ_payoffs(problem::Problem, Xs_, Xp_)
-    (s, p) = f(problem.prodFunc, Xs_, Xp_)
-    # proba(safe) = sum(proba(i safe) * proba(i win))
-    σ = sum(problem.riskFunc(s) .* problem.csf(p))
-    payoffs = payoffs_with_s_p(problem, Xs_, Xp_, s, p)
-    return s, p, σ, payoffs
-end
-
-function SolverResult(problem::Problem, success::Bool, Xs::Vector{T}, Xp::Vector{T}; fill = true) where {T <: Real}
+function SolverResult(problem::AbstractProblem, success::Bool, Xs::Vector{T}, Xp::Vector{T}; fill = true) where {T <: Real}
     return if fill
         SolverResult(success, Xs, Xp, get_s_p_σ_payoffs(problem, Xs, Xp)...)
     else
@@ -72,6 +64,15 @@ function resolve_multiple_solutions(
     end
     
     return results[best]
+end
+
+function resolve_multiple_solutions(results, problem::ProblemWithBeliefs)
+    # can't distinguish between results with different beliefs
+    if length(results) > 1
+        println("More than one result found; equilibrium is ambiguous")
+        return get_null_result(problem.n)
+    end
+    return results[1]
 end
 
 function print(result::SolverResult)
