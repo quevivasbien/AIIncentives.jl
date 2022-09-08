@@ -34,15 +34,6 @@ export
     all_rewards
 
 
-include("utils.jl")
-include("ProdFunc.jl")
-include("RiskFunc.jl")
-include("CSF.jl")
-include("PayoffFunc.jl")
-include("Problem.jl")
-include("SolverResult.jl")
-include("solve.jl")
-include("scenarios.jl")
-include("plotting.jl")
+include("includes.jl")
 
 end

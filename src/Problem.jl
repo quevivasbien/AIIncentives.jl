@@ -95,24 +95,36 @@ end
 function get_payoff(problem::Problem, i::Int, Xs::Vector, Xp::Vector)
     (s, p) = problem.prodFunc(Xs, Xp)
     proba_win = problem.csf(p)  # probability that each player wins
-    pf_lose = payoff_lose(problem.payoffFunc, p[i])  # payoff if player i loses
-    pf_win = payoff_win(problem.payoffFunc, p[i])  # payoff if player i wins
+    (pf_win, pf_lose) = problem.payoffFunc(i, p[i])  # payoffs if player i wins/loses
     payoffs = [(j == i) ? pf_win : pf_lose for j in 1:problem.n]
     σis = problem.riskFunc(s)  # vector of proba(safe) conditional on each player winning
     cond_σ = proba_win .* σis
-    return sum(payoffs .* cond_σ) - (1 - sum(cond_σ)) * problem.d[i] - problem.r[i] .* (Xs[i] + Xp[i])
+    if problem.payoffFunc isa PayoffOnDisaster && problem.payoffFunc.whogets[i]
+        return sum(payoffs .* cond_σ) + sum((payoffs .- problem.d[i]) .* (1 .- cond_σ)) - problem.r[i] .* (Xs[i] + Xp[i])
+    else
+        return sum(payoffs .* cond_σ) - (1 - sum(cond_σ)) * problem.d[i] - problem.r[i] .* (Xs[i] + Xp[i])
+    end
 end
 
 function payoffs_with_s_p(problem::Problem, Xs::Vector, Xp::Vector, s::Vector, p::Vector)
     proba_win = problem.csf(p)  # probability that each player wins
     # construct matrix of payoffs
-    pf_lose = payoff_lose.(Ref(problem.payoffFunc), p)  # payoff if each player loses
-    pf_win = payoff_win.(Ref(problem.payoffFunc), p)  # payoff if player i wins
+    (pf_win, pf_lose) = problem.payoffFunc(p)  # payoffs if each player wins/loses
     payoffs = repeat(pf_lose, 1, problem.n)
     payoffs[diagind(payoffs)] = pf_win
     σis = problem.riskFunc(s)  # vector of proba(safe) conditional on each player winning
-    cond_σ = proba_win .* σis
-    return vec(sum(payoffs .* cond_σ, dims = 2)) .- (1 .- sum(cond_σ)) .* problem.d .- problem.r .* (Xs .+ Xp)
+    cond_σ = proba_win .* σis  # proba that i wins and outcome is safe
+    if problem.payoffFunc isa PayoffOnDisaster
+        safe_payoffs = vec(sum(payoffs .* cond_σ, dims = 2))
+        cond_d = proba_win .* (1 .- σis)  # proba that i wins and outcome is not safe
+        disaster_payoffs = vec(
+            sum((payoffs .* problem.payoffFunc.whogets .- problem.d) .* cond_d,
+            dims = 2
+        ))
+        return safe_payoffs .+ disaster_payoffs .- problem.r .* (Xs .+ Xp)
+    else
+        return vec(sum(payoffs .* cond_σ, dims = 2)) .- (1 .- sum(cond_σ)) .* problem.d .- problem.r .* (Xs .+ Xp)
+    end
 end
 
 function get_payoffs(problem::Problem, Xs::Vector, Xp::Vector)
@@ -161,11 +173,20 @@ function ProblemWithBeliefs(
     return ProblemWithBeliefs(n, baseProblem, beliefs)
 end
 
-# probably some way to use macros to make this less repetitive
-get_payoff(problem::ProblemWithBeliefs, i, Xs, Xp) = get_payoff(problem.baseProblem, i, Xs, Xp)
-get_payoffs(problem::ProblemWithBeliefs, Xs, Xp) = get_payoffs(problem.baseProblem, Xs, Xp)
-payoffs_with_s_p(problem::ProblemWithBeliefs, Xs, Xp, s, p) = payoffs_with_s_p(problem.baseProblem, Xs, Xp, s, p)
-get_s_p_σ_payoffs(problem::ProblemWithBeliefs, Xs_, Xp_) = get_s_p_σ_payoffs(problem.baseProblem, Xs_, Xp_)
+
+# pass calls to baseProblem automatically
+macro to_baseProblem(f)
+    fname = Symbol(f)
+    quote
+        function $(esc(fname))(problem::ProblemWithBeliefs, args...)
+            return $(esc(fname))(problem.baseProblem, args...)
+        end     
+    end
+end
+
+@to_baseProblem get_payoff
+@to_baseProblem payoffs_with_s_p
+@to_baseProblem get_s_p_σ_payoffs
 
 is_symmetric(problem::ProblemWithBeliefs) = (
     is_symmetric(problem.baseProblem)
