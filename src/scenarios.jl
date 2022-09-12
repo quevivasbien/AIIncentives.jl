@@ -1,4 +1,6 @@
-mutable struct Scenario{T}
+abstract type AbstractScenario end
+
+mutable struct Scenario{T} <: AbstractScenario
     n_players::Int
     A::Array{T}
     α::Array{T}
@@ -78,6 +80,7 @@ struct ScenarioResult{T <: Union{SolverResult, Vector{SolverResult}}, N}
     solverResults::Array{T, N}
 end
 
+
 function extract(res::ScenarioResult{SolverResult, 1}, field::Symbol)
     if field in (:success, :Xs, :Xp, :s, :p, :σ, :payoffs)
         [getfield(x, field) for x in res.solverResults]
@@ -86,35 +89,40 @@ function extract(res::ScenarioResult{SolverResult, 1}, field::Symbol)
     end
 end
 
-function get_problem_from_scenario(scenario::Scenario, index)
-    if index isa Int
-        @assert isnothing(scenario.varying2)
-    end
-    (_, A, α, B, β, θ, d, r) = if isnothing(scenario.varying2)
-        get_params(scenario)
-    else
-        get_params_with_secondary_variation(scenario)
-    end
+function get_params(scenario::Scenario)
+    varying = transpose(getfield(scenario, scenario.varying))
+    n_steps = size(varying, 2)
+    
+    A = similar(scenario.A, (scenario.n_players, n_steps))
+    α = similar(scenario.α, (scenario.n_players, n_steps))
+    B = similar(scenario.B, (scenario.n_players, n_steps))
+    β = similar(scenario.β, (scenario.n_players, n_steps))
+    θ = similar(scenario.θ, (scenario.n_players, n_steps))
+    d = similar(scenario.d, (scenario.n_players, n_steps))
+    r = similar(scenario.r, (scenario.n_players, n_steps))
 
-    Problem(
-        scenario.n_players,
-        d[:, index...], r[:, index...],
-        ProdFunc(
-            scenario.n_players,
-            A[:, index...], α[:, index...],
-            B[:, index...], β[:, index...],
-            θ[:, index...]
-        ),
-        scenario.riskFunc,
-        scenario.csf,
-        scenario.payoffFunc
-    )
+    # create stacks of variables to send to solver
+    # everything needs to have shape n_players x n_steps
+    for (newvar, symbol) in zip((A, α, B, β, θ, d, r), (:A, :α, :B, :β, :θ, :d, :r))
+        if symbol == scenario.varying
+            copy!(newvar, varying)
+        else
+            var = getfield(scenario, symbol)
+            copy!(
+                newvar,
+                reshape(
+                    repeat(
+                        reshape(var, :), n_steps
+                    ),
+                    size(var)..., n_steps
+                )
+            )
+        end
+    end
+    return A, α, B, β, θ, d, r
 end
 
-
-# SOLVER FUNCTIONS:
-
-function get_params_with_secondary_variation(scenario)
+function get_params_with_secondary_variation(scenario::Scenario)
     varying = transpose(getfield(scenario, scenario.varying))
     n_steps = size(varying, 2)
     varying2 = transpose(getfield(scenario, scenario.varying2))
@@ -147,91 +155,165 @@ function get_params_with_secondary_variation(scenario)
             )
         end
     end
-    return (n_steps, n_steps_secondary), A, α, B, β, θ, d, r
+    return A, α, B, β, θ, d, r
 end
 
-function solve_with_secondary_variation(
-    scenario::Scenario,
-    method::Symbol,
-    options
-)
-    @assert method != :scatter && method != :mixed "Secondary variation is unsupported with the mixed or scatter solvers."
-
-    results = if method in (:scatter, :mixed)
-        Array{Vector{SolverResult}}(undef, (n_steps_secondary, n_steps))
+function get_problem_from_scenario(scenario::Scenario, index)
+    idx = Tuple(index)
+    if length(idx) == 1
+        @assert isnothing(scenario.varying2)
+    end
+    (A, α, B, β, θ, d, r) = if isnothing(scenario.varying2)
+        get_params(scenario)
     else
-        Array{SolverResult}(undef, (n_steps_secondary, n_steps))
-    end
-    Threads.@threads for i in 1:n_steps
-        Threads.@threads for j in 1:n_steps_secondary
-            problem = get_problem_from_scenario(scenario, (i, j))
-            results[j, i] = solve(problem, method, options)
-        end
-    end
-    if options.verbose
-        print.(results)
+        get_params_with_secondary_variation(scenario)
     end
 
-    return ScenarioResult(scenario, results)
+    Problem(
+        scenario.n_players,
+        d[:, idx...], r[:, idx...],
+        ProdFunc(
+            scenario.n_players,
+            A[:, idx...], α[:, idx...],
+            B[:, idx...], β[:, idx...],
+            θ[:, idx...]
+        ),
+        scenario.riskFunc,
+        scenario.csf,
+        scenario.payoffFunc
+    )
 end
 
-function get_params(scenario)
-    varying = transpose(getfield(scenario, scenario.varying))
-    n_steps = size(varying, 2)
-    
-    A = similar(scenario.A, (scenario.n_players, n_steps))
-    α = similar(scenario.α, (scenario.n_players, n_steps))
-    B = similar(scenario.B, (scenario.n_players, n_steps))
-    β = similar(scenario.β, (scenario.n_players, n_steps))
-    θ = similar(scenario.θ, (scenario.n_players, n_steps))
-    d = similar(scenario.d, (scenario.n_players, n_steps))
-    r = similar(scenario.r, (scenario.n_players, n_steps))
 
-    # create stacks of variables to send to solver
-    # everything needs to have shape n_players x n_steps
-    for (newvar, symbol) in zip((A, α, B, β, θ, d, r), (:A, :α, :B, :β, :θ, :d, :r))
-        if symbol == scenario.varying
-            copy!(newvar, varying)
-        else
-            var = getfield(scenario, symbol)
-            copy!(
-                newvar,
-                reshape(
-                    repeat(
-                        reshape(var, :), n_steps
-                    ),
-                    size(var)..., n_steps
-                )
-            )
-        end
-    end
-    return n_steps, A, α, B, β, θ, d, r
-end
+# SOLVER FUNCTIONS:
 
-function solve(scenario::Scenario, method::Symbol, options)
+function setup_results(scenario::Scenario, method)
     if !isnothing(scenario.varying2)
-        return solve_with_secondary_variation(
-            scenario,
-            method,
-            options
-        )
-    end
+        @assert method != :scatter && method != :mixed "Secondary variation is unsupported with the mixed or scatter solvers."
 
-    results = if method in (:mixed, :scatter)
-        Array{Vector{SolverResult}}(undef, n_steps)
+        n_steps = size(getfield(scenario, scenario.varying), 2)
+        n_steps_secondary = size(getfield(scenario, scenario.varying2), 2)
+        return if method in (:scatter, :mixed)
+            Array{Vector{SolverResult}}(undef, (n_steps_secondary, n_steps))
+        else
+            Array{SolverResult}(undef, (n_steps_secondary, n_steps))
+        end
     else
-        Array{SolverResult}(undef, n_steps)
+        n_steps = size(getfield(scenario, scenario.varying), 2)
+        return if method in (:mixed, :scatter)
+            Array{Vector{SolverResult}}(undef, n_steps)
+        else
+            Array{SolverResult}(undef, n_steps)
+        end
     end
+end
+
+function fill_results!(results, scenario, method, options)
+    indices = CartesianIndices(size(results))
+    Threads.@threads for index in indices
+        problem = get_problem_from_scenario(scenario, index)
+        results[index] = solve(problem, method, options)
+    end
+end
+
+function solve(scenario::AbstractScenario, method, options)
+    
+    # create an empty array of the correct size to contain the results
+    results = setup_results(scenario, method)
     # send to solver
-    Threads.@threads for i in 1:n_steps
-        problem = get_problem_from_scenario(scenario, i)
-        results[i] = solve(problem, method, options)
-    end
+    fill_results!(results, scenario, method, options)
 
     return ScenarioResult(scenario, results)
 end
 
-function solve(scenario::Scenario; method::Symbol = :iters, kwargs...)
+function solve(scenario::AbstractScenario; method = :iters, kwargs...)
     options = SolverOptions(SolverOptions(); kwargs...)
-    return solve(scenario, method::Symbol, options)
+    return solve(scenario, method, options)
+end
+
+
+"""
+Variation of scenario that encapsulates ProblemWithBeliefs
+Provide a dict of idiosyncratic beliefs for each player
+
+baseScenario determines baseProblem and how problem varies
+beliefs determine how each player's belief is different from baseProblem
+"""
+struct ScenarioWithBeliefs{T, U} <: AbstractScenario
+    baseScenario::Scenario{T}
+    beliefs::Vector{U}
+end
+
+function ScenarioWithBeliefs(
+    ;
+    baseScenario = Scenario(),
+    beliefs = fill(Dict{Symbol, Vector{Float64}}(), Scenario().n_players)
+)
+    @assert length(beliefs) == baseScenario.n_players
+    @assert all(length(x) == baseScenario.n_players for b in beliefs for x in values(b))
+    return ScenarioWithBeliefs(baseScenario, beliefs)
+end
+
+function replace_belief(baseObj, field::Symbol, belief::Dict)
+    return if field in keys(belief)
+        belief[field]
+    else
+        getfield(baseObj, field)
+    end
+end
+
+function setup_results(scenario::ScenarioWithBeliefs, method)
+    return setup_results(scenario.baseScenario, method)
+end
+
+function get_problem_from_scenario(scenario::ScenarioWithBeliefs, index)
+    idx = Tuple(index)
+    if length(idx) == 1
+        @assert isnothing(scenario.baseScenario.varying2)
+    end
+    (A, α, B, β, θ, d, r) = if isnothing(scenario.baseScenario.varying2)
+        get_params(scenario.baseScenario)
+    else
+        get_params_with_secondary_variation(scenario.baseScenario)
+    end
+
+    baseProblem = Problem(
+        scenario.baseScenario.n_players,
+        d[:, idx...], r[:, idx...],
+        ProdFunc(
+            scenario.baseScenario.n_players,
+            A[:, idx...], α[:, idx...],
+            B[:, idx...], β[:, idx...],
+            θ[:, idx...]
+        ),
+        scenario.baseScenario.riskFunc,
+        scenario.baseScenario.csf,
+        scenario.baseScenario.payoffFunc
+    )
+
+    beliefs = [
+        Problem(
+            scenario.baseScenario.n_players,
+            replace_belief(baseProblem, :d, belief),
+            replace_belief(baseProblem, :r, belief),
+            ProdFunc(
+                scenario.baseScenario.n_players,
+                replace_belief(baseProblem.prodFunc, :A, belief),
+                replace_belief(baseProblem.prodFunc, :α, belief),
+                replace_belief(baseProblem.prodFunc, :B, belief),
+                replace_belief(baseProblem.prodFunc, :β, belief),
+                replace_belief(baseProblem.prodFunc, :θ, belief)
+            ),
+            scenario.baseScenario.riskFunc,
+            scenario.baseScenario.csf,
+            scenario.baseScenario.payoffFunc
+        )
+        for belief in scenario.beliefs
+    ]
+
+    return ProblemWithBeliefs(baseProblem = baseProblem, beliefs = beliefs)
+end
+
+function ScenarioResult(scenario::ScenarioWithBeliefs, results)
+    return ScenarioResult(scenario.baseScenario, results)
 end
