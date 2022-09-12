@@ -63,13 +63,20 @@ end
 
 function PayoffOnDisaster(
     ;
-    n = 2,
-    basePayoff = LinearPayoff(),
-    whogets = fill(true, n)  # default is all players can get payoff even if disaster occurs
+    basePayoff::PayoffFunc = LinearPayoff(),
+    whogets::Union{Vector{Bool}, Nothing} = nothing
 )
-    @assert basePayoff.n == n "basePayoff.n must match n"
-    @assert length(whogets) == n "length of indicator vector `whogets` must match n"
-    return PayoffOnDisaster(n, basePayoff, whogets)
+    n = basePayoff.n
+    if isnothing(whogets)
+        return PayoffOnDisaster(
+            n,
+            basepayoff,
+            fill(true, n)  # default is all players can get payoff even if disaster occurs
+        )
+    else
+        @assert length(whogets) == n "length of indicator vector `whogets` must match basePayoff.n"
+        return PayoffOnDisaster(n, basePayoff, whogets)
+    end
 end
 
 # forward calls to basePayoff by default

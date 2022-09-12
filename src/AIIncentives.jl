@@ -14,9 +14,13 @@ export
     AdditiveRisk,
     WinnerOnlyRisk,
     LinearPayoff,
+    PayoffOnDisaster,
     Problem,
+    ProblemWithBeliefs,
     SolverOptions,
+    SolverResult,
     Scenario,
+    ScenarioResult,
 
     get_plots,
     get_plots_for_result,  # deprecated

@@ -185,6 +185,7 @@ macro to_baseProblem(f)
 end
 
 @to_baseProblem get_payoff
+@to_baseProblem get_payoffs
 @to_baseProblem payoffs_with_s_p
 @to_baseProblem get_s_p_σ_payoffs
 

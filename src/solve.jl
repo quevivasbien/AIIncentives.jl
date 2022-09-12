@@ -20,11 +20,7 @@ function SolverOptions(options::SolverOptions; kwargs...)
     return SolverOptions(fields...)
 end
 
-
-function verify(problem, strat, options)
-    Xs = strat[:, 1]
-    Xp = strat[:, 2]
-    payoffs = get_payoffs(problem, Xs, Xp)
+function check_symmetric(problem, payoffs, options)
     if (
         is_symmetric(problem)
         && !all(isapprox.(payoffs[1], payoffs[2:problem.n], rtol = sqrt(options.tol)))
@@ -35,11 +31,14 @@ function verify(problem, strat, options)
         return false
     end
 
-    # Check some points around the given strat
+    return true
+end
+
+# Check some points around the given strat
     # returns true if strat satisfies optimality (in nash eq. sense) at those points
     # won't always catch wrong solutions, but does a decent job
-    for i in 1:problem.n
-        higher_Xs = setindex!(
+function verify_i(problem, i, Xs, Xp, payoffs, options)
+    higher_Xs = setindex!(
             copy(Xs),
             (Xs[i] == 0) ? EPSILON : options.verify_mult * Xs[i],
             i
@@ -79,15 +78,49 @@ function verify(problem, strat, options)
             payoffs[i],
             rtol = sqrt(options.tol)
         ))
-            if options.verbose
-                println("Solution failed verification!")
-                println("| Xs = $Xs, Xp = $Xp: $(payoffs[i])")
-                println("| Xs[$i] = $(higher_Xs[i]): $payoff_higher_Xs")
-                println("| Xp[$i] = $(higher_Xp[i]): $payoff_higher_Xp")
-                println("| Xs[$i] = $(lower_Xs[i]): $payoff_lower_Xs")
-                println("| Xp[$i] = $(lower_Xp[i]): $payoff_lower_Xp")
-                println("∟ Symmetric: $payoff_mirror")
-            end
+        if options.verbose
+            println("Solution failed verification!")
+            println("| Xs = $Xs, Xp = $Xp: $(payoffs[i])")
+            println("| Xs[$i] = $(higher_Xs[i]): $payoff_higher_Xs")
+            println("| Xp[$i] = $(higher_Xp[i]): $payoff_higher_Xp")
+            println("| Xs[$i] = $(lower_Xs[i]): $payoff_lower_Xs")
+            println("| Xp[$i] = $(lower_Xp[i]): $payoff_lower_Xp")
+            println("∟ Symmetric: $payoff_mirror")
+        end
+        return false
+    end
+
+    return true
+end
+
+function verify(problem, strat, options)
+    Xs = strat[:, 1]
+    Xp = strat[:, 2]
+    payoffs = get_payoffs(problem, Xs, Xp)
+    
+    if !check_symmetric(problem, payoffs, options)
+        return false
+    end
+
+    for i in 1:problem.n
+        if !verify_i(problem, i, Xs, Xp, payoffs, options)
+            return false
+        end
+    end
+    return true
+end
+
+function verify(problem::ProblemWithBeliefs, strat, options)
+    Xs = strat[:, 1]
+    Xp = strat[:, 2]
+    payoffs = [get_payoff(problem.beliefs[i], i, Xs, Xp) for i in 1:problem.n]
+    
+    if !check_symmetric(problem, payoffs, options)
+        return false
+    end
+
+    for i in 1:problem.n
+        if !verify_i(problem.beliefs[i], i, Xs, Xp, payoffs, options)
             return false
         end
     end

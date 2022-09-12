@@ -156,8 +156,6 @@ function solve_with_secondary_variation(
     options
 )
     @assert method != :scatter && method != :mixed "Secondary variation is unsupported with the mixed or scatter solvers."
-    
-    ((n_steps, n_steps_secondary), A, α, B, β, θ, d, r) = get_params_with_secondary_variation(scenario)
 
     results = if method in (:scatter, :mixed)
         Array{Vector{SolverResult}}(undef, (n_steps_secondary, n_steps))
@@ -219,8 +217,6 @@ function solve(scenario::Scenario, method::Symbol, options)
         )
     end
 
-    (n_steps, A, α, B, β, θ, d, r) = get_params(scenario)
-
     results = if method in (:mixed, :scatter)
         Array{Vector{SolverResult}}(undef, n_steps)
     else
@@ -228,7 +224,6 @@ function solve(scenario::Scenario, method::Symbol, options)
     end
     # send to solver
     Threads.@threads for i in 1:n_steps
-        prodFunc = ProdFunc(A[:, i], α[:, i], B[:, i], β[:, i], θ[:, i])
         problem = get_problem_from_scenario(scenario, i)
         results[i] = solve(problem, method, options)
     end
