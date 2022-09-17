@@ -43,7 +43,7 @@ function get_null_result(n)
         fill(NaN, n),
         fill(NaN, n),
         fill(NaN, n),
-        fill(NaN, n),
+        NaN,
         fill(NaN, n)
     )
 end

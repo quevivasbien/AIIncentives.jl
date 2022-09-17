@@ -169,7 +169,7 @@ function get_problem_from_scenario(scenario::Scenario, index)
         get_params_with_secondary_variation(scenario)
     end
 
-    Problem(
+    return Problem(
         scenario.n_players,
         d[:, idx...], r[:, idx...],
         ProdFunc(
@@ -191,15 +191,15 @@ function setup_results(scenario::Scenario, method)
     if !isnothing(scenario.varying2)
         @assert method != :scatter && method != :mixed "Secondary variation is unsupported with the mixed or scatter solvers."
 
-        n_steps = size(getfield(scenario, scenario.varying), 2)
-        n_steps_secondary = size(getfield(scenario, scenario.varying2), 2)
+        n_steps = size(getfield(scenario, scenario.varying), 1)
+        n_steps_secondary = size(getfield(scenario, scenario.varying2), 1)
         return if method in (:scatter, :mixed)
             Array{Vector{SolverResult}}(undef, (n_steps_secondary, n_steps))
         else
             Array{SolverResult}(undef, (n_steps_secondary, n_steps))
         end
     else
-        n_steps = size(getfield(scenario, scenario.varying), 2)
+        n_steps = size(getfield(scenario, scenario.varying), 1)
         return if method in (:mixed, :scatter)
             Array{Vector{SolverResult}}(undef, n_steps)
         else
@@ -211,7 +211,7 @@ end
 function fill_results!(results, scenario, method, options)
     indices = CartesianIndices(size(results))
     Threads.@threads for index in indices
-        problem = get_problem_from_scenario(scenario, index)
+        problem = get_problem_from_scenario(scenario, (reverse ∘ Tuple)(index))
         results[index] = solve(problem, method, options)
     end
 end

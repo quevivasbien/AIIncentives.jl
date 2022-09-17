@@ -195,7 +195,7 @@ function _plot_helper_same(xaxis, Xs, Xp, s, p, total_safety, payoffs, xlabel, l
         plot(
             xaxis, combine_values(x[1, :, :]),
             xlabel = xlabel, ylabel = ylab,
-            labels = labels[1],
+            label = labels[1],
             color = colors[1]
         )
         for (x, ylab) in zip(
@@ -217,7 +217,7 @@ function _plot_helper_same(xaxis, Xs, Xp, s, p, total_safety, payoffs, xlabel, l
             plot!(
                 plt,
                 xaxis, combine_values(x[i, :, :]),
-                labels = labels[i],
+                label = labels[i],
                 color = colors[i]
             )
         end
