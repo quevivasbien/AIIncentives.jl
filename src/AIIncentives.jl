@@ -1,11 +1,5 @@
 module AIIncentives
 
-using Optim
-using Plots, Plots.PlotMeasures
-using Plots: RecipesBase.plot
-
-using LinearAlgebra: diagind
-
 export
     solve,
     
@@ -21,6 +15,7 @@ export
     SolverResult,
     Scenario,
     ScenarioResult,
+    ScenarioWithBeliefs,
 
     get_plots,
     get_plots_for_result,  # deprecated

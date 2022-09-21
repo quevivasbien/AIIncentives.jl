@@ -239,19 +239,26 @@ Provide a dict of idiosyncratic beliefs for each player
 baseScenario determines baseProblem and how problem varies
 beliefs determine how each player's belief is different from baseProblem
 """
-struct ScenarioWithBeliefs{T, U} <: AbstractScenario
+struct ScenarioWithBeliefs{T} <: AbstractScenario
     baseScenario::Scenario{T}
-    beliefs::Vector{U}
+    beliefs::Vector{Dict{Symbol, Vector{T}}}
 end
 
 function ScenarioWithBeliefs(
-    ;
-    baseScenario = Scenario(),
-    beliefs = fill(Dict{Symbol, Vector{Float64}}(), Scenario().n_players)
+    baseScenario = Scenario();
+    beliefs = fill(Dict(), Scenario().n_players)
 )
-    @assert length(beliefs) == baseScenario.n_players
-    @assert all(length(x) == baseScenario.n_players for b in beliefs for x in values(b))
-    return ScenarioWithBeliefs(baseScenario, beliefs)
+    n = baseScenario.n_players
+    @assert length(beliefs) == n
+    # expand beliefs so values are vectors of length n
+    beliefs_ = [
+        Dict{Symbol, Vector{Float64}}(
+            k => as_Float64_Array(v, n) for (k, v) in b
+        )
+        for b in beliefs
+    ]
+    @assert all(length(x) == n for b in beliefs_ for x in values(b))
+    return ScenarioWithBeliefs(baseScenario, beliefs_)
 end
 
 function replace_belief(baseObj, field::Symbol, belief::Dict)
@@ -311,7 +318,7 @@ function get_problem_from_scenario(scenario::ScenarioWithBeliefs, index)
         for belief in scenario.beliefs
     ]
 
-    return ProblemWithBeliefs(baseProblem = baseProblem, beliefs = beliefs)
+    return ProblemWithBeliefs(baseProblem, beliefs = beliefs)
 end
 
 function ScenarioResult(scenario::ScenarioWithBeliefs, results)

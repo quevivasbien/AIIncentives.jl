@@ -163,8 +163,7 @@ struct ProblemWithBeliefs{T <: Problem} <: AbstractProblem
 end
 
 function ProblemWithBeliefs(
-    ;
-    baseProblem::T = Problem(),
+    baseProblem::T = Problem();
     beliefs::Vector{T} = fill(Problem(), Problem().n)
 ) where {T <: Problem}
     n = baseProblem.n

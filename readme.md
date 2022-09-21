@@ -242,7 +242,7 @@ The other methods you can use are the following:
 
 The `scenarios.jl` file includes some helpful tools for looking at cases where you vary one or two variables of a problem while holding the others fixed.
 
-The main type defined here is `Scenario`. You can create a scenario like
+The main type defined here is `Scenario`, which is essentially an object that generates a family of related `Problem`s. You can create a scenario like
 ```julia
 scenario = Scenario(
     n_players = 2,
@@ -348,3 +348,58 @@ and if we want to change the formatting, we can do that with the typical `Plots.
 plot!(plot_title = "Some fantastic plots", xlabel = "a new label for the x axis")
 ```
 would change the title and x-axis label for the most recently created plot.
+
+## Heterogeneous beliefs
+
+By default, actors in problems/scenarios are assumed to have perfect information (correct beliefs) about all parameters (their own and others'). The package also supports some special problems and scenarios that describe situations where players can have different beliefs about the model parameters. Currently, we can assume only that players vary in their beliefs about the model state but that their higher-order beliefs are perfect (i.e., they may disagree about the true model parameters but are perfectly informed about their competitors' beliefs).
+
+### `ProblemWithBeliefs`
+
+The `ProblemWithBeliefs` type is essentially a container that holds
+
+1. a `Problem` called `baseProblem` which describes the *true* parameter values
+2. a vector of `Problem`s called `beliefs`, which describe the `Problem`s that each player thinks they are in
+
+For example, if we let the first element of `beliefs` be equal to `baseProblem`, then we're assuming that player 1 has correct beliefs; if we let the second element of `beliefs` be the same as `baseProblem`, but with `A` higher, then we're assuming that player 2 thinks that safety productivity is higher than it actually is.
+
+Here's how we could initialize the above example:
+```julia
+problem = ProblemWithBeliefs(
+    Problem(A = 10),  # this is baseProblem
+    beliefs = [
+        Problem(A = 10),  # same as baseProblem in this example
+        Problem(A = 20)  # player 2 has different belief about A
+    ]
+)
+```
+
+We can use `ProblemWithBeliefs` in essentially the same way we might use a `Problem`; i.e., we can plug it into `solve`, get payoffs for a particular strategy, and so on.
+
+### `ScenarioWithBeliefs`
+
+What if we want to create a `Scenario` with heterogenous beliefs? Here, we can use the handy `ScenarioWithBeliefs`, which works analogously to `ProblemWithBeliefs` (as described above). To create a `ScenarioWithBelefs`, we supply a `baseScenario`, which represents the true parameter values for the scenario; then we supply `beliefs`, which here is a vector of `Dict`s that indicate how each player's beliefs differ from `baseScenario`.
+
+As an example, if we wanted a scenario with `A = 10`, player 1's beliefs match the true parameters (with `A = 10`), and player 2's believes that `A = 20`, we could let
+```julia
+beliefs = [
+    Dict(),  # supply an empty Dict to denote no difference from baseScenario
+    Dict(:A => 20)
+]
+```
+
+To initialize the complete scenario:
+```julia
+scenario = ScenarioWithBeliefs(
+    # supply baseScenario first:
+    Scenario(
+        A = 10,
+        # ... other scenario params
+    ),
+    beliefs = [
+        Dict(),
+        Dict(:A => 20)
+    ]
+)
+```
+
+We can use `ScenarioWithBeliefs` just like we would a normal `Scenario`; i.e., we can plug it into `solve`, plot the result, and so on.

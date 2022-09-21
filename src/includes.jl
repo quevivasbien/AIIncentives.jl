@@ -1,3 +1,11 @@
+# import dependencies and load module components
+
+using Optim
+using Plots, Plots.PlotMeasures
+using Plots: RecipesBase.plot
+
+using LinearAlgebra: diagind
+
 include("utils.jl")
 include("ProdFunc.jl")
 include("RiskFunc.jl")
