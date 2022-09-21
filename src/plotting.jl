@@ -132,29 +132,17 @@ end
 
 # Functions for plotting with secondary variation
 
+# kind of a garish color scheme, but meant to be suitable when printed in b&w
 function get_colors(n_lines)
-    colors = RGB[]
-    red = [1., 0., 0.]
-    blue = [0., 0., 1.]
-    for i in 0:(n_lines-1)
-        λ = i / (n_lines - 1)
-        push!(colors, RGB((red * λ + blue * (1 - λ))...))
-    end
-    return colors
+    return HSV.(range(240, step = 25, length = n_lines), 1., 1.)
 end
 
 function get_color_palettes(n_lines, n_players)
-    palettes = ColorPalette[]
-    red = [1., 0., 0.]
-    green = [0., 1., 0.]
-    blue = [0., 0., 1.]
-    for i in 0:(n_lines-1)
-        λ = i / (n_lines-1)
-        color1 = RGB((red * λ + blue * (1 - λ))...)
-        color2 = RGB(((red + blue) * 0.5 * λ + green * (1 - λ))...)
-        push!(palettes, palette([color2, color1], n_players))
-    end
-    return palettes
+    return [
+        palette(
+            HSV.(hue, range(1., 0.4, length = n_players), range(0.5, 1., length = n_players))
+        ) for hue in range(240, step = 25, length = n_lines)
+    ] 
 end
 
 function get_values_for_plot(results::Array{SolverResult, 2}; exclude_failed = true)
@@ -207,7 +195,7 @@ function _plot_helper_same(xaxis, Xs, Xp, s, p, total_safety, payoffs, xlabel, l
         plot(
             xaxis, combine_values(x[1, :, :]),
             xlabel = xlabel, ylabel = ylab,
-            labels = labels[1],
+            label = labels[1],
             color = colors[1]
         )
         for (x, ylab) in zip(
@@ -229,7 +217,7 @@ function _plot_helper_same(xaxis, Xs, Xp, s, p, total_safety, payoffs, xlabel, l
             plot!(
                 plt,
                 xaxis, combine_values(x[i, :, :]),
-                labels = labels[i],
+                label = labels[i],
                 color = colors[i]
             )
         end
