@@ -16,7 +16,7 @@ $$u_i := \sum_{j=1}^n \sigma_j(s) q_j(p) \rho_{ij}(p) - \left( 1 - \sum_{j=1}^n 
 
 subject to the other players' choices of *X<sub>s</sub>* and *X<sub>p</sub>*. The components of this expression will be explained more below, but the basic parts are as follows:
 
-* *q_i(p)* is the probability that player *i* wins a contest between all players.
+* *q<sub>i</sub>(p)* is the probability that player *i* wins a contest between all players.
 * *&sigma;<sub>i</sub>(s)* is the probability of a safe outcome given that player *i* wins the contest.
 * *&rho;<sub>ij</sub>(p)* is player *i*'s payoff if player *j* wins the contest, and the outcome is safe.
 * *d<sub>i</sub>* is the cost incurred by player *i* in the event of an unsafe (disaster) outcome.

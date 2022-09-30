@@ -146,15 +146,15 @@ function get_color_palettes(n_lines, n_players)
 end
 
 function get_values_for_plot(results::Array{SolverResult, 2}; exclude_failed = true)
-    (n_steps_secondary, n_steps) = size(results)
+    (n_steps, n_steps_secondary) = size(results)
     n_players = size(results[1, 1].Xs, 1)
-    Xs = fill(NaN, n_steps_secondary, n_steps, n_players)
-    Xp = fill(NaN, n_steps_secondary, n_steps, n_players)
-    s = fill(NaN, n_steps_secondary, n_steps, n_players)
-    p = fill(NaN, n_steps_secondary, n_steps, n_players)
-    payoffs = fill(NaN, n_steps_secondary, n_steps, n_players)
-    total_safety = fill(NaN, n_steps_secondary, n_steps)
-    for i in 1:n_steps_secondary, j in 1:n_steps
+    Xs = fill(NaN, n_steps, n_steps_secondary, n_players)
+    Xp = fill(NaN, n_steps, n_steps_secondary, n_players)
+    s = fill(NaN, n_steps, n_steps_secondary, n_players)
+    p = fill(NaN, n_steps, n_steps_secondary, n_players)
+    payoffs = fill(NaN, n_steps, n_steps_secondary, n_players)
+    total_safety = fill(NaN, n_steps, n_steps_secondary)
+    for i in 1:n_steps, j in 1:n_steps_secondary
         if results[i, j].success || !exclude_failed
             Xs[i, j, :] = results[i, j].Xs
             Xp[i, j, :] = results[i, j].Xp
@@ -168,19 +168,17 @@ function get_values_for_plot(results::Array{SolverResult, 2}; exclude_failed = t
 end
 
 function are_players_same(results::Array{SolverResult, 2})
-    (n_steps_secondary, n_steps) = size(results)
+    (n_steps, n_steps_secondary) = size(results)
     n_players = size(results[1, 1].Xs)[1]
-    strats = Array{Float64}(undef, n_steps_secondary, n_steps, n_players, 2)
-    for i in 1:n_steps_secondary
-        for j in 1:n_steps
-            strats[i, j, :, 1] = results[i, j].Xs
-            strats[i, j, :, 2] = results[i, j].Xp
-        end
+    strats = Array{Float64}(undef, n_steps, n_steps_secondary, n_players, 2)
+    for i in 1:n_steps, j in n_steps_secondary
+        strats[i, j, :, 1] = results[i, j].Xs
+        strats[i, j, :, 2] = results[i, j].Xp
     end
     return all(
         isapprox(
             strats[:, :, 1, :] - strats[:, :, i, :],
-            zeros(n_steps_secondary, n_steps, 2),
+            zeros(n_steps, n_steps_secondary, 2),
             atol=1e-2
         ) for i in 2:n_players
     )
@@ -188,12 +186,12 @@ end
 
 
 function _plot_helper_same(xaxis, Xs, Xp, s, p, total_safety, payoffs, xlabel, labels)
-    n_steps_secondary = size(s)[1]
+    n_steps_secondary = size(s, 2)
     colors = get_colors(n_steps_secondary)
     combine_values(x) = mean(x, 2)
     (Xp_plt, Xs_plt, perf_plt, safety_plt, payoff_plt) = (
         plot(
-            xaxis, combine_values(x[1, :, :]),
+            xaxis, combine_values(x[:, 1, :]),
             xlabel = xlabel, ylabel = ylab,
             label = labels[1],
             color = colors[1]
@@ -204,7 +202,7 @@ function _plot_helper_same(xaxis, Xs, Xp, s, p, total_safety, payoffs, xlabel, l
         )
     )
     total_safety_plt = plot(
-        xaxis, total_safety[1, :],
+        xaxis, total_safety[:, 1],
         xlabel = xlabel, ylabel = "σ",
         label = labels[1],
         color = colors[1]
@@ -216,14 +214,14 @@ function _plot_helper_same(xaxis, Xs, Xp, s, p, total_safety, payoffs, xlabel, l
         )
             plot!(
                 plt,
-                xaxis, combine_values(x[i, :, :]),
+                xaxis, combine_values(x[:, i, :]),
                 label = labels[i],
                 color = colors[i]
             )
         end
         plot!(
             total_safety_plt,
-            xaxis, total_safety[i, :],
+            xaxis, total_safety[:, 1],
             label = labels[i],
             color = colors[i]
         )
@@ -232,13 +230,13 @@ function _plot_helper_same(xaxis, Xs, Xp, s, p, total_safety, payoffs, xlabel, l
 end
 
 function _plot_helper_het(xaxis, Xs, Xp, s, p, total_safety, payoffs, xlabel, labels)
-    (n_steps_secondary, _, n_players) = size(s)
+    (_, n_steps_secondary, n_players) = size(s)
     palettes = get_color_palettes(n_steps_secondary, n_players)
     colors = get_colors(n_steps_secondary)
     labels1 = reshape(["$(labels[1]), player $i" for i in 1:n_players], 1, :)
     (Xp_plt, Xs_plt, perf_plt, safety_plt, payoff_plt) = (
         plot(
-            xaxis, x[1, :, :],
+            xaxis, x[:, 1, :],
             xlabel = xlabel, ylabel = ylab,
             labels = labels1,
             palette = palettes[1]
@@ -249,7 +247,7 @@ function _plot_helper_het(xaxis, Xs, Xp, s, p, total_safety, payoffs, xlabel, la
         )
     )
     total_safety_plt = plot(
-        xaxis, total_safety[1, :],
+        xaxis, total_safety[:, 1],
         xlabel = xlabel, ylabel = "σ",
         label = labels[1],
         color = colors[1]
@@ -262,14 +260,14 @@ function _plot_helper_het(xaxis, Xs, Xp, s, p, total_safety, payoffs, xlabel, la
         )
             plot!(
                 plt,
-                xaxis, x[i, :, :],
+                xaxis, x[:, i, :],
                 labels = labelsi,
                 palette = palettes[i]
             )
         end
         plot!(
             total_safety_plt,
-            xaxis, total_safety[i, :],
+            xaxis, total_safety[:, i],
             label = labels[i],
             color = colors[i]
         )
