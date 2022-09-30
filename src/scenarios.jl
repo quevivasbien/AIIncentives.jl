@@ -193,10 +193,10 @@ function setup_results(scenario::Scenario, method)
 
         n_steps = size(getfield(scenario, scenario.varying), 1)
         n_steps_secondary = size(getfield(scenario, scenario.varying2), 1)
-        return if method in (:scatter, :mixed)
-            Array{Vector{SolverResult}}(undef, (n_steps_secondary, n_steps))
+        return if method in (:mixed, :scatter)
+            Array{Vector{SolverResult}}(undef, (n_steps, n_steps_secondary))
         else
-            Array{SolverResult}(undef, (n_steps_secondary, n_steps))
+            Array{SolverResult}(undef, (n_steps, n_steps_secondary))
         end
     else
         n_steps = size(getfield(scenario, scenario.varying), 1)
@@ -208,13 +208,74 @@ function setup_results(scenario::Scenario, method)
     end
 end
 
-function fill_results!(results, scenario, method, options)
-    indices = CartesianIndices(size(results))
+function fill_results!(results, scenario, method, options, indices = nothing)
+    if isnothing(indices)
+        indices = CartesianIndices(size(results))
+    end
     Threads.@threads for index in indices
-        problem = get_problem_from_scenario(scenario, (reverse ∘ Tuple)(index))
+        problem = get_problem_from_scenario(scenario, index)
         results[index] = solve(problem, method, options)
     end
 end
+
+function is_jump(x, pred, succ)
+    if !x.success
+        return true
+    end
+    # if x is about the same as its predecessor, any problem is probably in successor
+    if !isapprox(x.Xs, pred.Xs, rtol = 0.25) && !isapprox(x.Xp, pred.Xp, rtol = 0.25)
+        return false
+    end
+    # figure out where x would be if it fell directly between predecessor and successor
+    # if it's too far from that, it's a jump
+    est_Xs = (pred.Xs .+ succ.Xs) ./ 2
+    est_Xp = (pred.Xp .+ succ.Xp) ./ 2
+    # value needs to be double its predicted value (or vice versa) to be considered a jump
+    if !isapprox(est_Xs, x.Xs, rtol = 0.5) || !isapprox(est_Xp, x.Xp, rtol = 0.5)
+        return true
+    end
+    return false
+end
+
+function find_jumps(results::Vector)
+    idxs = Vector{CartesianIndex}()
+    for i in axes(results, 1)[2:end-1]
+        if is_jump(results[i], results[i-1], results[i+1])
+            println("Found jump at $i")
+            push!(idxs, CartesianIndex(i))
+        end
+    end
+    return idxs
+end
+
+function find_jumps(results)
+    idxs = Vector{CartesianIndex}()
+    (m, n) = size(results)
+    # each column corresponds to a different value of the secondary varying param
+    # results should vary continuously within each column
+    for j in 1:n, i in 2:(m-1)
+        if is_jump(results[i, j], results[i-1, j], results[i+1, j])
+            println("Found jump at $((i, j))")
+            push!(idxs, CartesianIndex(i, j))
+        end
+    end
+    return idxs
+end
+
+function enforce_continuity!(results, scenario, method, options, retries = 10)
+    # find results that jump a lot relative to their neighbors
+    # re-do those until they're close to their neighbors
+    idxs_to_redo = find_jumps(results)
+    if !isempty(idxs_to_redo)
+        fill_results!(results, scenario, method, options, idxs_to_redo)
+        if retries > 0
+            enforce_continuity!(results, scenario, method, options, retries - 1)
+        else
+            println("Hit max jump retries")
+        end
+    end
+end
+
 
 function solve(scenario::AbstractScenario, method, options)
     
@@ -222,6 +283,9 @@ function solve(scenario::AbstractScenario, method, options)
     results = setup_results(scenario, method)
     # send to solver
     fill_results!(results, scenario, method, options)
+    # check for jumps (likely errors) and re-solve at those points
+    # Doesn't quite work yet, so commenting out for now
+    # enforce_continuity!(results, scenario, method, options)
 
     return ScenarioResult(scenario, results)
 end
