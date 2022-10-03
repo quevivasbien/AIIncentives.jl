@@ -75,7 +75,8 @@ function Problem(
     riskFunc::RiskFunc = WinnerOnlyRisk(),
     prodFunc::ProdFunc{Float64} = ProdFunc(),
     csf::CSF = BasicCSF(),
-    payoffFunc::PayoffFunc = LinearPayoff()
+    payoffFunc::PayoffFunc = LinearPayoff(),
+    costFunc::CostFunc = FixedUnitCost(n, 0.1),
 )
     @assert n >= 2 "n must be at least 2"
     @assert n == prodFunc.n "n must match prodFunc.n"
