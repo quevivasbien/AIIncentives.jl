@@ -20,10 +20,10 @@ function SolverOptions(options::SolverOptions; kwargs...)
     return SolverOptions(fields...)
 end
 
-function check_symmetric(problem, payoffs, options)
+function check_symmetric(problem, strat, options)
     if (
         is_symmetric(problem)
-        && !all(isapprox.(payoffs[1], payoffs[2:problem.n], rtol = sqrt(options.tol)))
+        && !all(isapprox.(strat[1, :]', strat[2:end, :], rtol = sqrt(options.tol)))
     )
         if options.verbose
             println("Solution should be symmetric but is not")
@@ -35,49 +35,49 @@ function check_symmetric(problem, payoffs, options)
 end
 
 # Check some points around the given strat
-    # returns true if strat satisfies optimality (in nash eq. sense) at those points
-    # won't always catch wrong solutions, but does a decent job
+# returns true if strat satisfies optimality (in nash eq. sense) at those points
+# won't always catch wrong solutions, but does a decent job
 function verify_i(problem, i, Xs, Xp, payoffs, options)
     higher_Xs = setindex!(
-            copy(Xs),
-            (Xs[i] == 0) ? EPSILON : options.verify_mult * Xs[i],
-            i
-        )
-        higher_Xp = setindex!(
-            copy(Xp),
-            (Xp[i] == 0) ? EPSILON : options.verify_mult * Xp[i],
-            i
-        )
-        lower_Xs = setindex!(copy(Xs), Xs[i] * options.verify_mult, i)
-        lower_Xp = setindex!(copy(Xp), Xp[i] * options.verify_mult, i)
+        copy(Xs),
+        (Xs[i] == 0) ? EPSILON : options.verify_mult * Xs[i],
+        i
+    )
+    higher_Xp = setindex!(
+        copy(Xp),
+        (Xp[i] == 0) ? EPSILON : options.verify_mult * Xp[i],
+        i
+    )
+    lower_Xs = setindex!(copy(Xs), Xs[i] * options.verify_mult, i)
+    lower_Xp = setindex!(copy(Xp), Xp[i] * options.verify_mult, i)
 
-        payoff_higher_Xs = get_payoff(problem, i, higher_Xs, Xp)
-        payoff_higher_Xp = get_payoff(problem, i, Xs, higher_Xp)
-        payoff_lower_Xs = get_payoff(problem, i, lower_Xs, Xp)
-        payoff_lower_Xp = get_payoff(problem, i, Xs, lower_Xp)
-        
-        mirror_Xs = setindex!(
-            copy(Xs),
-            (sum(Xs) - Xs[i]) / (length(Xs) - 1),
-            i
-        )
-        mirror_Xp = setindex!(
-            copy(Xp),
-            (sum(Xp) - Xp[i]) / (length(Xp) - 1),
-            i
-        )
-        payoff_mirror = get_payoff(problem, i, mirror_Xs, mirror_Xp)
-        if any(is_napprox_greater.(
-            (
-                payoff_higher_Xs,
-                payoff_higher_Xp,
-                payoff_lower_Xs,
-                payoff_lower_Xp,
-                payoff_mirror
-            ),
-            payoffs[i],
-            rtol = sqrt(options.tol)
-        ))
+    payoff_higher_Xs = get_payoff(problem, i, higher_Xs, Xp)
+    payoff_higher_Xp = get_payoff(problem, i, Xs, higher_Xp)
+    payoff_lower_Xs = get_payoff(problem, i, lower_Xs, Xp)
+    payoff_lower_Xp = get_payoff(problem, i, Xs, lower_Xp)
+    
+    mirror_Xs = setindex!(
+        copy(Xs),
+        (sum(Xs) - Xs[i]) / (length(Xs) - 1),
+        i
+    )
+    mirror_Xp = setindex!(
+        copy(Xp),
+        (sum(Xp) - Xp[i]) / (length(Xp) - 1),
+        i
+    )
+    payoff_mirror = get_payoff(problem, i, mirror_Xs, mirror_Xp)
+    if any(is_napprox_greater.(
+        (
+            payoff_higher_Xs,
+            payoff_higher_Xp,
+            payoff_lower_Xs,
+            payoff_lower_Xp,
+            payoff_mirror
+        ),
+        payoffs[i],
+        rtol = sqrt(options.tol)
+    ))
         if options.verbose
             println("Solution failed verification!")
             println("| Xs = $Xs, Xp = $Xp: $(payoffs[i])")
@@ -94,14 +94,13 @@ function verify_i(problem, i, Xs, Xp, payoffs, options)
 end
 
 function verify(problem, strat, options)
-    Xs = strat[:, 1]
-    Xp = strat[:, 2]
-    payoffs = get_payoffs(problem, Xs, Xp)
-    
-    if !check_symmetric(problem, payoffs, options)
+    if !check_symmetric(problem, strat, options)
         return false
     end
 
+    Xs = strat[:, 1]
+    Xp = strat[:, 2]
+    payoffs = get_payoffs(problem, Xs, Xp)
     for i in 1:problem.n
         if !verify_i(problem, i, Xs, Xp, payoffs, options)
             return false
@@ -111,14 +110,13 @@ function verify(problem, strat, options)
 end
 
 function verify(problem::ProblemWithBeliefs, strat, options)
-    Xs = strat[:, 1]
-    Xp = strat[:, 2]
-    payoffs = [get_payoff(problem.beliefs[i], i, Xs, Xp) for i in 1:problem.n]
-    
-    if !check_symmetric(problem, payoffs, options)
+    if !check_symmetric(problem, strat, options)
         return false
     end
 
+    Xs = strat[:, 1]
+    Xp = strat[:, 2]
+    payoffs = [get_payoff(problem.beliefs[i], i, Xs, Xp) for i in 1:problem.n]
     for i in 1:problem.n
         if !verify_i(problem.beliefs[i], i, Xs, Xp, payoffs, options)
             return false

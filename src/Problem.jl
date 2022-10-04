@@ -138,7 +138,7 @@ function payoffs_with_s_p(problem::Problem, Xs::Vector, Xp::Vector, s::Vector, p
             sum((payoffs .* problem.payoffFunc.whogets .- problem.d) .* cond_d,
             dims = 2
         ))
-        return safe_payoffs .+ disaster_payoffs .- problem.r .* (Xs .+ Xp)
+        return safe_payoffs .+ disaster_payoffs .- problem.costFunc(Xs, Xp)
     else
         return vec(sum(payoffs .* cond_σ, dims = 2)) .- (1 .- sum(cond_σ)) .* problem.d .- problem.costFunc(Xs, Xp)
     end

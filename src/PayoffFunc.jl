@@ -62,15 +62,15 @@ struct PayoffOnDisaster{T <: PayoffFunc} <: PayoffFunc
 end
 
 function PayoffOnDisaster(
+    basePayoff::PayoffFunc = LinearPayoff()
     ;
-    basePayoff::PayoffFunc = LinearPayoff(),
     whogets::Union{Vector{Bool}, Nothing} = nothing
 )
     n = basePayoff.n
     if isnothing(whogets)
         return PayoffOnDisaster(
             n,
-            basepayoff,
+            basePayoff,
             fill(true, n)  # default is all players can get payoff even if disaster occurs
         )
     else
