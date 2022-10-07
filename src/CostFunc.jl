@@ -17,6 +17,11 @@ struct FixedUnitCost{T <: Real} <: CostFunc
     r::Vector{T}
 end
 
+function FixedUnitCost(r::Vector{T}) where {T <: Real}
+    n = length(r)
+    return FixedUnitCost(n, r)
+end
+
 function FixedUnitCost(n::Int, r::T) where T <: Real
     return FixedUnitCost(n, fill(r, n))
 end
@@ -40,6 +45,12 @@ Like FixedUnitCost but with different prices for Xs and Xp
 struct FixedUnitCost2{T <: Real} <: CostFunc
     n::Int
     r::Matrix{T}
+end
+
+function FixedUnitCost2(rs::Vector{T}, rp::Vector{T}) where {T <: Real}
+    n = length(rs)
+    @assert n == length(rp) "rs and rp must have same length"
+    return FixedUnitCost2(n, [rs rp])
 end
 
 function FixedUnitCost2(n::Int, rs::T, rp::T) where {T <: Real}

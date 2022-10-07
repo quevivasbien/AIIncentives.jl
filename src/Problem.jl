@@ -117,7 +117,7 @@ function get_payoff(problem::Problem, i::Int, Xs::Vector, Xp::Vector)
     σis = problem.riskFunc(s)  # vector of proba(safe) conditional on each player winning
     cond_σ = proba_win .* σis
     if problem.payoffFunc isa PayoffOnDisaster && problem.payoffFunc.whogets[i]
-        return sum(payoffs .* cond_σ) + sum((payoffs .- problem.d[i]) .* (1 .- cond_σ)) - problem.costFunc(i, Xs, Xp)
+        return sum(payoffs .* cond_σ) + sum((payoffs .- problem.d[i]) .* proba_win .* (1 .- σis)) - problem.costFunc(i, Xs, Xp)
     else
         return sum(payoffs .* cond_σ) - (1 - sum(cond_σ)) * problem.d[i] - problem.costFunc(i, Xs, Xp)
     end
