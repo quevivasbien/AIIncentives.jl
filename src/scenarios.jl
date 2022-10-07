@@ -366,7 +366,6 @@ function get_problem_from_scenario(scenario::ScenarioWithBeliefs, index)
         Problem(
             scenario.baseScenario.n_players,
             replace_belief(baseProblem, :d, belief),
-            replace_belief(baseProblem, :r, belief),
             ProdFunc(
                 scenario.baseScenario.n_players,
                 replace_belief(baseProblem.prodFunc, :A, belief),
@@ -377,7 +376,11 @@ function get_problem_from_scenario(scenario::ScenarioWithBeliefs, index)
             ),
             scenario.baseScenario.riskFunc,
             scenario.baseScenario.csf,
-            scenario.baseScenario.payoffFunc
+            scenario.baseScenario.payoffFunc,
+            FixedUnitCost(
+                scenario.baseScenario.n_players,
+                replace_belief(baseProblem.costFunc, :r, belief)
+            ),
         )
         for belief in scenario.beliefs
     ]

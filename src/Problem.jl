@@ -57,14 +57,26 @@ payoff_i = problem(i, Xs, Xp)
 
 (Note that in the above, `Xs` and `Xp` are vectors of length `problem.n`.)
 """
-struct Problem{T <: Real, R <: RiskFunc, C <: CSF, P <: PayoffFunc} <: AbstractProblem
+struct Problem{T <: Real, R <: RiskFunc, C <: CSF, P <: PayoffFunc, K <: CostFunc} <: AbstractProblem
     n::Int
     d::Vector{T}
-    r::Vector{T}
     prodFunc::ProdFunc{T}
     riskFunc::R
     csf::C
     payoffFunc::P
+    costFunc::K
+end
+
+function Problem(
+    n::Int,
+    d::Vector{T},
+    r::Vector{T},
+    prodFunc::ProdFunc{T},
+    riskFunc::R,
+    csf::C,
+    payoffFunc::P,
+) where {T <: Real, R <: RiskFunc, C <: CSF, P <: PayoffFunc}
+    return Problem(n, d, prodFunc, riskFunc, csf, payoffFunc, FixedUnitCost(n, r))
 end
 
 function Problem(
@@ -75,20 +87,25 @@ function Problem(
     riskFunc::RiskFunc = WinnerOnlyRisk(),
     prodFunc::ProdFunc{Float64} = ProdFunc(),
     csf::CSF = BasicCSF(),
-    payoffFunc::PayoffFunc = LinearPayoff()
+    payoffFunc::PayoffFunc = LinearPayoff(),
+    costFunc::Union{Nothing, CostFunc} = nothing,
 )
     @assert n >= 2 "n must be at least 2"
     @assert n == prodFunc.n "n must match prodFunc.n"
+    @assert n == payoffFunc.n "n must match payoffFunc.n"
+    if isnothing(costFunc)
+        costFunc = FixedUnitCost(n, as_Float64_Array(r, n))
+    end
+    @assert n == costFunc.n "n must match costFunc.n"
     problem = Problem(
         n,
         as_Float64_Array(d, n),
-        as_Float64_Array(r, n),
         prodFunc,
         riskFunc,
         csf,
-        payoffFunc
+        payoffFunc,
+        costFunc
     )
-    @assert all(length(getfield(problem, x)) == n for x in [:d, :r]) "Your input params need to match the number of players"
     return problem
 end
 
@@ -100,9 +117,9 @@ function get_payoff(problem::Problem, i::Int, Xs::Vector, Xp::Vector)
     σis = problem.riskFunc(s)  # vector of proba(safe) conditional on each player winning
     cond_σ = proba_win .* σis
     if problem.payoffFunc isa PayoffOnDisaster && problem.payoffFunc.whogets[i]
-        return sum(payoffs .* cond_σ) + sum((payoffs .- problem.d[i]) .* (1 .- cond_σ)) - problem.r[i] .* (Xs[i] + Xp[i])
+        return sum(payoffs .* cond_σ) + sum((payoffs .- problem.d[i]) .* proba_win .* (1 .- σis)) - problem.costFunc(i, Xs, Xp)
     else
-        return sum(payoffs .* cond_σ) - (1 - sum(cond_σ)) * problem.d[i] - problem.r[i] .* (Xs[i] + Xp[i])
+        return sum(payoffs .* cond_σ) - (1 - sum(cond_σ)) * problem.d[i] - problem.costFunc(i, Xs, Xp)
     end
 end
 
@@ -121,9 +138,9 @@ function payoffs_with_s_p(problem::Problem, Xs::Vector, Xp::Vector, s::Vector, p
             sum((payoffs .* problem.payoffFunc.whogets .- problem.d) .* cond_d,
             dims = 2
         ))
-        return safe_payoffs .+ disaster_payoffs .- problem.r .* (Xs .+ Xp)
+        return safe_payoffs .+ disaster_payoffs .- problem.costFunc(Xs, Xp)
     else
-        return vec(sum(payoffs .* cond_σ, dims = 2)) .- (1 .- sum(cond_σ)) .* problem.d .- problem.r .* (Xs .+ Xp)
+        return vec(sum(payoffs .* cond_σ, dims = 2)) .- (1 .- sum(cond_σ)) .* problem.d .- problem.costFunc(Xs, Xp)
     end
 end
 
@@ -143,8 +160,8 @@ end
 function is_symmetric(problem::Problem)
     (
         is_symmetric(problem.prodFunc)
+        && is_symmetric(problem.costFunc)
         && all(problem.d[1] .== problem.d[2:problem.n])
-        && all(problem.r[1] .== problem.r[2:problem.n])
     )
 end
 
