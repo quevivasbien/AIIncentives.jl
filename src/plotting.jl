@@ -1,6 +1,6 @@
 # Functions for plotting with only single varying param
 
-function get_values_for_plot(results::Vector{SolverResult}; exclude_failed = true)
+function get_values_for_plot(results::Vector{SolverResult}, exclude_failed = true)
     n_steps = length(results)
     n_players = size(results[1].Xs, 1)
     Xs = fill(NaN, n_steps, n_players)
@@ -22,20 +22,20 @@ function get_values_for_plot(results::Vector{SolverResult}; exclude_failed = tru
     return Xs, Xp, s, p, total_safety, payoffs
 end
 
-function create_plots(results::Vector{SolverResult}, xaxis, xlabel, labels; exclude_failed = true)
-    (Xs, Xp, s, p, total_safety, payoffs) = get_values_for_plot(results; exclude_failed)
+function create_plots(results::Vector{SolverResult}, xvals, xlabel, labels, exclude_failed = true; kwargs...)
+    (Xs, Xp, s, p, total_safety, payoffs) = get_values_for_plot(results, exclude_failed)
     labels_ = reshape(labels, 1, :)
-    Xp_plt = plot(xaxis, Xp, xlabel = xlabel, ylabel = "Xₚ", labels = labels_)
-    Xs_plt = plot(xaxis, Xs, xlabel = xlabel, ylabel = "Xₛ", labels = labels_)
-    perf_plt = plot(xaxis, p, xlabel = xlabel, ylabel = "performance", labels = labels_)
-    safety_plt = plot(xaxis, s, xlabel = xlabel, ylabel = "safety", labels = labels_)
-    total_safety_plt = plot(xaxis, total_safety, xlabel = xlabel, ylabel = "σ", label = nothing)
-    payoff_plt = plot(xaxis, payoffs, xlabel = xlabel, ylabel = "payoff", labels = labels_)
+    Xp_plt = plot(xvals, Xp, xlabel = xlabel, ylabel = "Xₚ", labels = labels_; kwargs...)
+    Xs_plt = plot(xvals, Xs, xlabel = xlabel, ylabel = "Xₛ", labels = labels_; kwargs...)
+    perf_plt = plot(xvals, p, xlabel = xlabel, ylabel = "performance", labels = labels_; kwargs...)
+    safety_plt = plot(xvals, s, xlabel = xlabel, ylabel = "safety", labels = labels_; kwargs...)
+    total_safety_plt = plot(xvals, total_safety, xlabel = xlabel, ylabel = "σ", label = nothing; kwargs...)
+    payoff_plt = plot(xvals, payoffs, xlabel = xlabel, ylabel = "payoff", labels = labels_; kwargs...)
     return Xp_plt, Xs_plt, perf_plt, safety_plt, total_safety_plt, payoff_plt
 end
 
-function create_plot(results::Vector{SolverResult}, xaxis, xlabel, plotsize, labels, title, logscale; exclude_failed = true)
-    Xp_plt, Xs_plt, perf_plt, safety_plt, total_safety_plt, payoff_plt = create_plots(results, xaxis, xlabel, labels; exclude_failed)
+function create_plot(results::Vector{SolverResult}, xvals, xlabel, labels, logscale, exclude_failed = true; kwargs...)
+    Xp_plt, Xs_plt, perf_plt, safety_plt, total_safety_plt, payoff_plt = create_plots(results, xvals, xlabel, labels, exclude_failed; kwargs...)
     if logscale
         yaxis!(Xp_plt, :log10)
         yaxis!(Xs_plt, :log10)
@@ -46,67 +46,65 @@ function create_plot(results::Vector{SolverResult}, xaxis, xlabel, plotsize, lab
         Xp_plt, Xs_plt,
         perf_plt, safety_plt,
         total_safety_plt, payoff_plt,
-        layout = (3, 2), size = plotsize, legend_font_pointsize = 6,
+        layout = (3, 2), size = (900, 900), legend_font_pointsize = 6,
         legend_background_color = RGBA(1., 1., 1., 0.5),
         left_margin = 20px
     )
-    if !isnothing(title)
-        plot!(plot_title = title)
-    end
     return final_plot
 end
 
 # functions for plotting with single varying param, scatterplot instead of line plot (for when multiple solutions are found)
 
-function get_values_for_scatterplot(results::Vector{Vector{SolverResult}}, xaxis; take_avg = false, exclude_failed = true)
+function get_values_for_scatterplot(results::Vector{Vector{SolverResult}}, xvals, take_avg = false, exclude_failed = true)
     if exclude_failed
-        xaxis = [fill(x, sum((r.success for r in s))) for (x, s) in zip(xaxis, results)]
+        xvals = [fill(x, sum((r.success for r in s))) for (x, s) in zip(xvals, results)]
         results = [[s for s in r if s.success] for r in results]
     else
-        xaxis = [fill(x, length(s)) for (x, s) in zip(xaxis, results)]
+        xvals = [fill(x, length(s)) for (x, s) in zip(xvals, results)]
     end
     if take_avg
-        xaxis_ = [mean(x) for x in xaxis]
+        xvals_ = [mean(x) for x in xvals]
         Xs = hcat((mean(hcat((s.Xs for s in r)...), 2) for r in results)...) |> transpose
         Xp = hcat((mean(hcat((s.Xp for s in r)...), 2) for r in results)...) |> transpose
         s = hcat((mean(hcat((s.s for s in r)...), 2) for r in results)...) |> transpose
         p = hcat((mean(hcat((s.p for s in r)...), 2) for r in results)...) |> transpose
         payoffs = hcat((mean(hcat((s.payoffs for s in r)...), 2) for r in results)...) |> transpose
         total_safety = [mean([s.σ for s in r]) for r in results]
-        return xaxis_, Xs, Xp, s, p, total_safety, payoffs
+        return xvals_, Xs, Xp, s, p, total_safety, payoffs
     else
-        xaxis_ = vcat(xaxis...)
+        xvals_ = vcat(xvals...)
         Xs = hcat((s.Xs for r in results for s in r)...) |> transpose
         Xp = hcat((s.Xp for r in results for s in r)...) |> transpose
         s = hcat((s.s for r in results for s in r)...) |> transpose
         p = hcat((s.p for r in results for s in r)...) |> transpose
         payoffs = hcat((s.payoffs for r in results for s in r)...) |> transpose
         total_safety = [s.σ for r in results for s in r]
-        return xaxis_, Xs, Xp, s, p, total_safety, payoffs        
+        return xvals_, Xs, Xp, s, p, total_safety, payoffs        
     end
 end
 
-function create_scatterplots(results::Vector{Vector{SolverResult}}, xaxis, xlabel, labels; take_avg = false, exclude_failed = true)
-    (xaxis_, Xs, Xp, s, p, total_safety, payoffs) = get_values_for_scatterplot(
-        results, xaxis, take_avg = take_avg, exclude_failed = exclude_failed
+function create_scatterplots(results::Vector{Vector{SolverResult}}, xvals, xlabel, labels, take_avg = false, exclude_failed = true; kwargs...)
+    (xvals_, Xs, Xp, s, p, total_safety, payoffs) = get_values_for_scatterplot(
+        results, xvals, take_avg, exclude_failed
     )
     labels_ = reshape(labels, 1, :)
-    Xp_plt = scatter(xaxis_, Xp, xlabel = xlabel, ylabel = "Xₚ", labels = labels_)
-    Xs_plt = scatter(xaxis_, Xs, xlabel = xlabel, ylabel = "Xₛ", labels = labels_)
-    perf_plt = scatter(xaxis_, p, xlabel = xlabel, ylabel = "performance", labels = labels_)
-    safety_plt = scatter(xaxis_, s, xlabel = xlabel, ylabel = "safety", labels = labels_)
-    total_safety_plt = scatter(xaxis_, total_safety, xlabel = xlabel, ylabel = "σ", label = nothing)
-    payoff_plt = scatter(xaxis_, payoffs, xlabel = xlabel, ylabel = "payoff", labels = labels_)
+    Xp_plt = scatter(xvals_, Xp, xlabel = xlabel, ylabel = "Xₚ", labels = labels_; kwargs...)
+    Xs_plt = scatter(xvals_, Xs, xlabel = xlabel, ylabel = "Xₛ", labels = labels_; kwargs...)
+    perf_plt = scatter(xvals_, p, xlabel = xlabel, ylabel = "performance", labels = labels_; kwargs...)
+    safety_plt = scatter(xvals_, s, xlabel = xlabel, ylabel = "safety", labels = labels_; kwargs...)
+    total_safety_plt = scatter(xvals_, total_safety, xlabel = xlabel, ylabel = "σ", label = nothing; kwargs...)
+    payoff_plt = scatter(xvals_, payoffs, xlabel = xlabel, ylabel = "payoff", labels = labels_; kwargs...)
     return Xp_plt, Xs_plt, perf_plt, safety_plt, total_safety_plt, payoff_plt
 end
 
 function create_scatterplot(
-    results::Vector{Vector{SolverResult}}, xaxis, xlabel,
-    plotsize, labels, title, logscale;
-    take_avg = false, exclude_failed = true
+    results::Vector{Vector{SolverResult}}, xvals, xlabel,
+    labels, logscale,
+    take_avg = false, exclude_failed = true;
+    kwargs...
 )
     Xp_plt, Xs_plt, perf_plt, safety_plt, total_safety_plt, payoff_plt = create_scatterplots(
-        results, xaxis, xlabel, labels, take_avg = take_avg, exclude_failed = exclude_failed
+        results, xvals, xlabel, labels, take_avg, exclude_failed; kwargs...
     )
     if logscale
         yaxis!(Xp_plt, :log10)
@@ -118,14 +116,11 @@ function create_scatterplot(
         Xp_plt, Xs_plt,
         perf_plt, safety_plt,
         total_safety_plt, payoff_plt,
-        layout = (3, 2), size = plotsize, legend_font_pointsize = 6,
+        layout = (3, 2), size = (900, 900), legend_font_pointsize = 6,
         legend_background_color = RGBA(1., 1., 1., 0.5),
         markeralpha = 0.25, markerstrokealpha = 0.,
         left_margin = 20px
     )
-    if !isnothing(title)
-        plot!(plot_title = title)
-    end
     return final_plot
 end
 
@@ -134,7 +129,7 @@ end
 
 # kind of a garish color scheme, but meant to be suitable when printed in b&w
 function get_colors(n_lines)
-    return HSV.(range(240, step = 25, length = n_lines), 1., 1.)
+    return HSV.(range(240, step = 25, length = n_lines), 1., 1.) |> to_rowvec
 end
 
 function get_color_palettes(n_lines, n_players)
@@ -145,7 +140,7 @@ function get_color_palettes(n_lines, n_players)
     ] 
 end
 
-function get_values_for_plot(results::Array{SolverResult, 2}; exclude_failed = true)
+function get_values_for_plot(results::Array{SolverResult, 2}, exclude_failed = true)
     (n_steps, n_steps_secondary) = size(results)
     n_players = size(results[1, 1].Xs, 1)
     Xs = fill(NaN, n_steps, n_steps_secondary, n_players)
@@ -185,16 +180,16 @@ function are_players_same(results::Array{SolverResult, 2})
 end
 
 
-function _plot_helper_same(xaxis, Xs, Xp, s, p, total_safety, payoffs, xlabel, labels)
+function _plot_helper_same(xvals, Xs, Xp, s, p, total_safety, payoffs, xlabel, labels; kwargs...)
     n_steps_secondary = size(s, 2)
     colors = get_colors(n_steps_secondary)
-    combine_values(x) = mean(x, 2)
     (Xp_plt, Xs_plt, perf_plt, safety_plt, payoff_plt) = (
         plot(
-            xaxis, combine_values(x[:, 1, :]),
+            xvals, mean(x, 3),
             xlabel = xlabel, ylabel = ylab,
-            label = labels[1],
-            color = colors[1]
+            labels = labels,
+            colors = colors;
+            kwargs...
         )
         for (x, ylab) in zip(
             (Xp, Xs, p, s, payoffs),
@@ -202,57 +197,33 @@ function _plot_helper_same(xaxis, Xs, Xp, s, p, total_safety, payoffs, xlabel, l
         )
     )
     total_safety_plt = plot(
-        xaxis, total_safety[:, 1],
+        xvals, total_safety,
         xlabel = xlabel, ylabel = "σ",
-        label = labels[1],
-        color = colors[1]
+        colors = colors;
+        kwargs...
     )
-    for i in 2:n_steps_secondary
-        for (plt, x) in zip(
-            (Xp_plt, Xs_plt, perf_plt, safety_plt, payoff_plt),
-            (Xp, Xs, p, s, payoffs)
-        )
-            plot!(
-                plt,
-                xaxis, combine_values(x[:, i, :]),
-                label = labels[i],
-                color = colors[i]
-            )
-        end
-        plot!(
-            total_safety_plt,
-            xaxis, total_safety[:, 1],
-            label = labels[i],
-            color = colors[i]
-        )
-    end
     return Xp_plt, Xs_plt, perf_plt, safety_plt, total_safety_plt, payoff_plt
 end
 
-function _plot_helper_het(xaxis, Xs, Xp, s, p, total_safety, payoffs, xlabel, labels)
+function _plot_helper_het(xvals, Xs, Xp, s, p, total_safety, payoffs, xlabel, labels; kwargs...)
     (_, n_steps_secondary, n_players) = size(s)
     palettes = get_color_palettes(n_steps_secondary, n_players)
     colors = get_colors(n_steps_secondary)
-    labels1 = reshape(["$(labels[1]), player $i" for i in 1:n_players], 1, :)
     (Xp_plt, Xs_plt, perf_plt, safety_plt, payoff_plt) = (
         plot(
-            xaxis, x[:, 1, :],
-            xlabel = xlabel, ylabel = ylab,
-            labels = labels1,
-            palette = palettes[1]
+            xlabel = xlabel, ylabel = ylab;
+            kwargs...
         )
-        for (x, ylab) in zip(
-            (Xp, Xs, p, s, payoffs),
-            ("Xₚ", "Xₛ", "performance", "safety", "payoff")
-        )
+        for ylab in ("Xₚ", "Xₛ", "performance", "safety", "payoff")
     )
     total_safety_plt = plot(
-        xaxis, total_safety[:, 1],
+        xvals, total_safety,
         xlabel = xlabel, ylabel = "σ",
-        label = labels[1],
-        color = colors[1]
+        labels = labels,
+        colors = colors;
+        kwargs...
     )
-    for i in 2:n_steps_secondary
+    for i in 1:n_steps_secondary
         labelsi = reshape(["$(labels[i]), player $j" for j in 1:n_players], 1, :)
         for (plt, x) in zip(
             (Xp_plt, Xs_plt, perf_plt, safety_plt, payoff_plt),
@@ -260,35 +231,29 @@ function _plot_helper_het(xaxis, Xs, Xp, s, p, total_safety, payoffs, xlabel, la
         )
             plot!(
                 plt,
-                xaxis, x[:, i, :],
+                xvals, x[:, i, :],
                 labels = labelsi,
                 palette = palettes[i]
             )
         end
-        plot!(
-            total_safety_plt,
-            xaxis, total_safety[:, i],
-            label = labels[i],
-            color = colors[i]
-        )
     end
     return Xp_plt, Xs_plt, perf_plt, safety_plt, total_safety_plt, payoff_plt
 end
 
-function create_plots(results::Array{SolverResult, 2}, xaxis, xlabel, labels; exclude_failed = true)
-    (Xs, Xp, s, p, total_safety, payoffs) = get_values_for_plot(results, exclude_failed = exclude_failed)
+function create_plots(results::Array{SolverResult, 2}, xvals, xlabel, labels, exclude_failed = true; kwargs...)
+    (Xs, Xp, s, p, total_safety, payoffs) = get_values_for_plot(results, exclude_failed)
     players_same = are_players_same(results)
     return if players_same
-        _plot_helper_same(xaxis, Xs, Xp, s, p, total_safety, payoffs, xlabel, labels)
+        _plot_helper_same(xvals, Xs, Xp, s, p, total_safety, payoffs, xlabel, labels; kwargs...)
     else
-        _plot_helper_het(xaxis, Xs, Xp, s, p, total_safety, payoffs, xlabel, labels)
+        _plot_helper_het(xvals, Xs, Xp, s, p, total_safety, payoffs, xlabel, labels; kwargs...)
     end
 end
 
 
-function create_plot(results::Array{SolverResult, 2}, xaxis, xlabel, plotsize, labels, title, logscale; exclude_failed = true)
+function create_plot(results::Array{SolverResult, 2}, xvals, xlabel, labels, logscale, exclude_failed = true; kwargs...)
     (Xp_plt, Xs_plt, perf_plt, safety_plt, total_safety_plt, payoff_plt) = create_plots(
-        results, xaxis, xlabel, labels, exclude_failed = exclude_failed
+        results, xvals, xlabel, labels, exclude_failed; kwargs...
     )
     if logscale
         yaxis!(Xp_plt, :log10)
@@ -298,17 +263,14 @@ function create_plot(results::Array{SolverResult, 2}, xaxis, xlabel, plotsize, l
     end
     final_plot = plot(
         Xp_plt, Xs_plt, perf_plt, safety_plt, total_safety_plt, payoff_plt,
-        layout = (3, 2), size = plotsize, legend_font_pointsize = 6,
+        layout = (3, 2), size = (900, 900), legend_font_pointsize = 6,
         legend_background_color = RGBA(1., 1., 1., 0.5),
         left_margin = 20px
     )
-    if !isnothing(title)
-        plot!(plot_title = title)
-    end
     return final_plot
 end
 
-function get_xaxis_for_result_plot(res::ScenarioResult)
+function get_xvals_for_result_plot(res::ScenarioResult)
     varying = getfield(res.scenario, res.scenario.varying)
     n_steps = size(varying, 1)
     return if varying[:, 2] == varying[:, 1]
@@ -318,155 +280,165 @@ function get_xaxis_for_result_plot(res::ScenarioResult)
     end
 end
 
-function get_labels_for_secondary_result_plot(res::ScenarioResult)
-    varying2 = getfield(res.scenario, res.scenario.varying2)
-    n_steps_secondary = size(varying2, 1)
-    return ["$(res.scenario.varying2) = $(varying2[i, :])" for i in 1:n_steps_secondary]
+function get_labels_for_plot(res::ScenarioResult, labels = nothing)
+    if !isnothing(labels)
+        if typeof(labels) <: AbstractVector
+            to_rowvec(labels)
+        else
+            labels
+        end
+    elseif isnothing(res.scenario.varying2)
+        ["player $i" for i in 1:res.scenario.n_players] |> to_rowvec
+    else
+        varying2 = getfield(res.scenario, res.scenario.varying2)
+        n_steps_secondary = size(varying2, 1)
+        ["$(res.scenario.varying2) = $(varying2[i, :])" for i in 1:n_steps_secondary] |> to_rowvec
+    end
 end
 
 # for results with no secondary variation and only one result per problem
 function get_plots(
     res::ScenarioResult{SolverResult, 1};
-    xaxis = nothing,
+    xvals = nothing,
     labels = nothing,
     take_avg = false,
-    exclude_failed = true
+    exclude_failed = true,
+    kwargs...
 )
-    xaxis = isnothing(xaxis) ? get_xaxis_for_result_plot(res) : xaxis
-    labels = isnothing(labels) ? ["player $i" for i in 1:res.scenario.n_players] : labels
+    xvals = isnothing(xvals) ? get_xvals_for_result_plot(res) : xvals
+    labels = get_labels_for_plot(res, labels)
     create_plots(
         res.solverResults,
-        xaxis,
+        xvals,
         res.scenario.varying,
         labels, 
-        exclude_failed = exclude_failed
+        exclude_failed;
+        kwargs...
     )
 end
 
 # for scenarios with secondary variation
 function get_plots(
     res::ScenarioResult{SolverResult, 2};
-    xaxis = nothing,
+    xvals = nothing,
     labels = nothing,
     take_avg = false,
-    exclude_failed = true
+    exclude_failed = true,
+    kwargs...
 )
-    xaxis = isnothing(xaxis) ? get_xaxis_for_result_plot(res) : xaxis
-    labels = isnothing(labels) ? get_labels_for_secondary_result_plot(res) : labels
+    xvals = isnothing(xvals) ? get_xvals_for_result_plot(res) : xvals
+    labels = get_labels_for_plot(res, labels)
     create_plots(
         res.solverResults,
-        xaxis,
+        xvals,
         res.scenario.varying,
         labels,
-        exclude_failed = exclude_failed
+        exclude_failed;
+        kwargs...
     )
 end
 
 # for results with no secondary variation and multiple results per problem
 function get_plots(
     res::ScenarioResult{Vector{SolverResult}, 1};
-    xaxis = nothing,
+    xvals = nothing,
     labels = nothing,
     take_avg = false,
-    exclude_failed = true
+    exclude_failed = true,
+    kwargs...
 )
-    xaxis = isnothing(xaxis) ? get_xaxis_for_result_plot(res) : xaxis
-    labels = isnothing(labels) ? ["player $i" for i in 1:res.scenario.n_players] : labels
+    xvals = isnothing(xvals) ? get_xvals_for_result_plot(res) : xvals
+    labels = get_labels_for_plot(res, labels)
     create_scatterplots(
         res.solverResults,
-        xaxis,
+        xvals,
         res.scenario.varying,
         labels,
-        take_avg = take_avg,
-        exclude_failed = exclude_failed
+        take_avg,
+        exclude_failed;
+        kwargs...
     )
 end
 
 # for results with no secondary variation and only one result per problem
 function RecipesBase.plot(
     res::ScenarioResult{SolverResult, 1};
-    xaxis = nothing,
-    plotsize = (900, 900),
-    title = nothing,
+    xvals = nothing,
     labels = nothing,
     logscale = false,
     take_avg = false,
-    exclude_failed = true
+    exclude_failed = true,
+    kwargs...
 )
-    xaxis = isnothing(xaxis) ? get_xaxis_for_result_plot(res) : xaxis
-    labels = isnothing(labels) ? ["player $i" for i in 1:res.scenario.n_players] : labels
+    xvals = isnothing(xvals) ? get_xvals_for_result_plot(res) : xvals
+    labels = get_labels_for_plot(res, labels)
     create_plot(
         res.solverResults,
-        xaxis,
+        xvals,
         res.scenario.varying,
-        plotsize,
         labels,
-        title,
         logscale,
-        exclude_failed = exclude_failed
+        exclude_failed;
+        kwargs...
     )
 end
 
 function get_plots_for_result(res; kwargs...)
-    println("Warning: `get_plots_for_result` is deprecated. Use `get_plots` instead.")
     return get_plots(res; kwargs...)
 end
+@deprecate get_plots_for_result get_plots
 
 # for scenarios with secondary variation
 function RecipesBase.plot(
     res::ScenarioResult{SolverResult, 2};
-    xaxis = nothing,
-    plotsize = (900, 900),
-    title = nothing,
+    xvals = nothing,
     labels = nothing,
     logscale = false,
     take_avg = false,
-    exclude_failed = true
+    exclude_failed = true,
+    kwargs...
 )
-    xaxis = isnothing(xaxis) ? get_xaxis_for_result_plot(res) : xaxis
-    labels = isnothing(labels) ? get_labels_for_secondary_result_plot(res) : labels
+    xvals = isnothing(xvals) ? get_xvals_for_result_plot(res) : xvals
+    labels = get_labels_for_plot(res, labels)
     create_plot(
         res.solverResults,
-        xaxis,
+        xvals,
         res.scenario.varying,
-        plotsize,
         labels,
-        title,
         logscale,
-        exclude_failed = exclude_failed
+        exclude_failed;
+        kwargs...
     )
 end
 
 # for results with no secondary variation and multiple results per problem
 function RecipesBase.plot(
     res::ScenarioResult{Vector{SolverResult}, 1};
-    xaxis = nothing,
-    plotsize = (900, 900),
-    title = nothing,
+    xvals = nothing,
     labels = nothing,
     logscale = false,
     take_avg = false,
-    exclude_failed = true
+    exclude_failed = true,
+    kwargs...
 )
-    xaxis = isnothing(xaxis) ? get_xaxis_for_result_plot(res) : xaxis
-    labels = isnothing(labels) ? ["player $i" for i in 1:res.scenario.n_players] : labels
+    xvals = isnothing(xvals) ? get_xvals_for_result_plot(res) : xvals
+    labels = get_labels_for_plot(res, labels)
     create_scatterplot(
         res.solverResults,
-        xaxis,
+        xvals,
         res.scenario.varying,
-        plotsize, 
         labels,
-        title,
         logscale,
-        take_avg = take_avg,
-        exclude_failed = exclude_failed
+        take_avg,
+        exclude_failed;
+        kwargs...
     )
 end
 
 function plot_result(res; kwargs...)
-    println("Warning: `plot_result` is deprecated. Use `plot` instead.")
     return plot(res; kwargs...)
 end
+@deprecate plot_result plot
 
 # FUNCTIONS FOR PLOTTING PAYOFFS (TO VISUALLY VERIFY EQUILIBRIUM)
 

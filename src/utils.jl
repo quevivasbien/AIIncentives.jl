@@ -7,12 +7,26 @@ function as_Float64_Array(x::Union{Real, AbstractArray}, n::Int)
     return fill(convert(Float64, x), n)
 end
 
-function mean(x, dim)
-    sum(x, dims = dim) ./ size(x, dim)
+function mean(x, dim::Integer)
+    reshape(
+        sum(x, dims = dim) ./ size(x, dim),
+        (s for (i, s) in enumerate(size(x)) if i != dim)...
+    )
+end
+
+function mean(x, dims::Tuple)
+    reshape(
+        sum(x, dims = dims) ./ prod(to_indices(size(x), dims)),
+        (s for (i, s) in enumerate(size(x)) if i ∉ dims)...
+    )
 end
 
 function mean(x)
     sum(x) ./ length(x)
+end
+
+function to_rowvec(x::Vector)
+    reshape(x, 1, :)
 end
 
 function slices_approx_equal(array, dim, atol, rtol)

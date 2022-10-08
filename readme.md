@@ -46,6 +46,8 @@ where `/path/to/AIIncentives.jl`, is of course the directory where you've cloned
 
 Then, to load the project code, just run `using AIIncentives` in your new Julia session. If this is the first time you do this, there will be a bit of delay as it precompiles some of the code.
 
+(You can also use the code by launching Julia without specifying a project directory -- e.g., `julia --threads=auto` -- then including `src/includes.jl` -- e.g., from the project directory, `include("src/includes.jl")`. This is better if you're messing around with the project's source code, but otherwise means you will need to recompile more code every time you use it.)
+
 You can then create and solve a scenario like
 ```julia
 scenario = Scenario(
