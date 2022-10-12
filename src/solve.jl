@@ -5,10 +5,10 @@ Base.@kwdef struct SolverOptions{T <: AbstractFloat}
     max_iters::Int = 100
     iter_algo::Optim.AbstractOptimizer = NelderMead()
     iter_options::Optim.Options = Optim.Options(x_tol = 1e-8, iterations = 500)
-    init_guess::T = 1.
+    init_guess::Union{T, Nothing} = nothing  # if nothing, then intialize randomly
     n_points::Int = 4
-    init_mu::T = 0.
-    init_sigma::T = 1.
+    init_mu::T = -1.
+    init_sigma::T = 0.1
     verbose::Bool = false
     verify::Bool = true
     verify_mult::T = 1.1
@@ -18,6 +18,14 @@ end
 function SolverOptions(options::SolverOptions; kwargs...)
     fields = ((f in kwargs.itr) ? kwargs[f] : getfield(options, f) for f in fieldnames(SolverOptions))
     return SolverOptions(fields...)
+end
+
+function get_init_guess(options::SolverOptions, shape)
+    if isnothing(options.init_guess)
+        return exp.(options.init_mu .+ options.init_sigma .* randn(shape))
+    else
+        return fill(options.init_guess, shape)
+    end
 end
 
 function check_symmetric(problem, strat, options)
@@ -187,9 +195,9 @@ end
 
 function solve_iters(
     problem,
-    init_guess::Array,
     options = SolverOptions()
 )
+    init_guess = get_init_guess(options, (problem.n, 2))
     converged, strat = suggest_iter_strat(problem, init_guess, options)
     success = converged && (!options.verify || verify(problem, strat, options))
     if success || options.retries == 0
@@ -200,19 +208,10 @@ function solve_iters(
         end
         return solve_iters(
             problem,
-            exp.(options.init_mu .+ options.init_sigma .* randn(problem.n, 2)),
             SolverOptions(options, retries = options.retries - 1)
         )
     end
 end
-
-function solve_iters(
-    problem,
-    options = SolverOptions()
-)
-    return solve_iters(problem, fill(options.init_guess, (problem.n, 2)), options)
-end
-
 
 # SCATTER ITERATING METHOD:
 # Runs iter_solve from multiple init points and compares results
@@ -222,12 +221,10 @@ function solve_scatter(
     options = SolverOptions()
 )
     # draw init points from log-normal distribution
-    init_points = exp.(options.init_mu .+ options.init_sigma .* randn(options.n_points, problem.n, 2))
     results = SolverResult[]
     Threads.@threads for i in 1:options.n_points
         result = solve_iters(
             problem,
-            init_points[i, :, :],
             options
         )
         if result.success
@@ -248,8 +245,6 @@ end
 function single_mixed_iter_for_i(problem, history, i, init_guess, options = SolverOptions())
     objs = [get_func(problem, i, history[:, :, j]) for j in axes(history, 3)]
     obj_(x) = sum(obj(exp.(x)) for obj in objs)
-    # jacs = [get_jac(problem, i, history[:, :, j], inplace = false) for j in size(history, 3)]
-    # jac_!(var, x) = copy!(var, sum(jac(exp.(x)) for jac in jacs))
     # if init_guess is zero-effort, try breaking out
     if all(init_guess .== 0.)
         init_guess = exp.(options.init_mu .+ options.init_sigma .* randn(2))
@@ -349,10 +344,9 @@ end
 
 function solve_hybrid(
     problem::Problem,
-    init_guess::Array,
-    options = SolverOptions()
+    options = SolverOptions(n_points = 2)
 )
-    iter_sol = solve_iters(problem, init_guess, options)
+    iter_sol = solve_iters(problem, options)
     if iter_sol.success
         return iter_sol
     end
@@ -361,13 +355,6 @@ function solve_hybrid(
         println("solve_iters failed, trying mixed solver")
     end
     return attempt_mixed(problem, options)
-end
-
-function solve_hybrid(
-    problem::Problem,
-    options = SolverOptions(n_points = 2)
-)
-    return solve_hybrid(problem, fill(options.init_guess, (problem.n, 2)), options)
 end
 
 

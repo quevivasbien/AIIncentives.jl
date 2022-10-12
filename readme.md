@@ -32,6 +32,8 @@ If you don't have Julia, download it from https://julialang.org/downloads/ and i
 ```
 (You need to type the left square brace, as that denotes that you want to enter Pkg mode.) Those dependencies will now be installed, so you won't have to repeat that last step in the future.
 
+Next, you'll need to download the code from this project's GitHub repository (if you haven't already). Save it wherever you want on your computer.
+
 At this point, the easiest way to load the project code is to open a new Julia session in the project directory -- from your computer's terminal, navigate to the project directory and run:
 ```bash
 /path/to/AIIncentives.jl$ julia --project --threads=auto
