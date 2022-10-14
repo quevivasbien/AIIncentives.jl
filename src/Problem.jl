@@ -312,6 +312,6 @@ function ProblemWithBeliefs(
 )
     return ProblemWithBeliefs(
         baseProblem,
-        [Problem(baseProblem; kwargs...) for kwargs in beliefs]
+        beliefs = [Problem(baseProblem; kwargs...) for kwargs in beliefs]
     )
 end

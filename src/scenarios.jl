@@ -9,17 +9,6 @@ struct Scenario{T <: Problem, N} <: AbstractScenario
     problems::Array{T, N}
 end
 
-function check_param_sizes(scenario::Scenario)
-    all(
-        (
-            x == scenario.varying
-            || x == scenario.varying2
-            || size(getfield(scenario, x), 1) == scenario.n
-        )
-        for x in [:A, :α, :B, :β, :θ, :d, :r]
-    )
-end
-
 function Scenario(
     ;
     n::Int = 2,
@@ -267,7 +256,7 @@ function ScenarioWithBeliefs(
     @assert length(beliefs) == n
     # expand beliefs so values are vectors of length n
     beliefs_ = [
-        Dict{Symbol, Vector{Float64}}(
+        Dict{Symbol, Any}(
             k => as_Float64_Array(v, n) for (k, v) in b
         )
         for b in beliefs
