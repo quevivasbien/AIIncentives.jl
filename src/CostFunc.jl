@@ -1,6 +1,6 @@
 """
 Determines cost of inputs
-Subtypes should implement `cost` and `is_symmetric`
+Subtypes should implement `cost` and `is_symmetric` and have an Int field `n`
 """
 abstract type CostFunc end
 

@@ -1,19 +1,12 @@
 abstract type AbstractScenario end
 
-mutable struct Scenario{T} <: AbstractScenario
-    n_players::Int
-    A::Array{T}
-    α::Array{T}
-    B::Array{T}
-    β::Array{T}
-    θ::Array{T}
-    d::Array{T}
-    r::Array{T}
-    riskFunc::RiskFunc
-    csf::CSF
-    payoffFunc::PayoffFunc
+struct Scenario{T <: Problem, N} <: AbstractScenario
+    n::Int
+    n_steps::Int
+    n_steps2::Union{Int, Nothing}
     varying::Symbol
     varying2::Union{Symbol, Nothing}
+    problems::Array{T, N}
 end
 
 function check_param_sizes(scenario::Scenario)
@@ -21,7 +14,7 @@ function check_param_sizes(scenario::Scenario)
         (
             x == scenario.varying
             || x == scenario.varying2
-            || size(getfield(scenario, x), 1) == scenario.n_players
+            || size(getfield(scenario, x), 1) == scenario.n
         )
         for x in [:A, :α, :B, :β, :θ, :d, :r]
     )
@@ -29,50 +22,106 @@ end
 
 function Scenario(
     ;
-    n_players::Int = 2,
-    A::Union{Real, AbstractArray} = 10., α::Union{Real, AbstractArray} = 0.5,
-    B::Union{Real, AbstractArray} = 10., β::Union{Real, AbstractArray} = 0.5,
-    θ::Union{Real, AbstractArray} = 0.5,
-    d::Union{Real, AbstractArray} = 0.,
-    r::Union{Real, AbstractArray} = 0.01:0.01:0.1,
-    riskFunc::RiskFunc = WinnerOnlyRisk(),
-    csf::CSF = BasicCSF(),
-    payoffFunc::PayoffFunc = LinearPayoff(),
+    n::Int = 2,
     varying::Symbol = :r,
     varying2::Union{Symbol, Nothing} = nothing,
-    varying_param = nothing,
-    secondary_varying_param = nothing
+    kwargs...
 )
-    @assert isnothing(varying_param) && isnothing(secondary_varying_param) "Use `varying` and `varying2` in place of `varying_param` and `secondary_varying_param`, respectively"
-    scenario = Scenario(
-        n_players,
-        as_Float64_Array(A, n_players), as_Float64_Array(α, n_players),
-        as_Float64_Array(B, n_players), as_Float64_Array(β, n_players),
-        as_Float64_Array(θ, n_players),
-        as_Float64_Array(d, n_players), as_Float64_Array(r, n_players),
-        riskFunc, csf, payoffFunc,
-        varying, varying2
+    kwargs_ = Dict(
+        k => if k == :varying || k == :varying2
+                if v isa AbstractMatrix
+                    @assert size(v, 2) == n "$k must have n columns"
+                    [x for x in eachrow(v)]
+                elseif v isa AbstractVector
+                    v
+                else
+                    [v]
+                end
+             else
+                v
+             end
+        for (k, v) in kwargs
     )
-    @assert check_param_sizes(scenario) "Your input params need to match the number of players"
-    # expand varying params if necessary
-    vparam = getfield(scenario, varying)
-    if size(vparam, 2) == 1
-        setfield!(
-            scenario, varying,
-            repeat(vparam, 1, n_players)
-        )
+
+    n_steps = length(kwargs_[varying])
+    n_steps2 = if isnothing(varying2)
+        1
+    else
+        length(kwargs_[varying2])
     end
-    if !isnothing(varying2)
-        vparam2 = getfield(scenario, varying2)
-        if size(vparam2, 2) == 1
-            setfield!(
-                scenario, varying2,
-                repeat(vparam2, 1, n_players)
-            )
+
+    problems = if isnothing(varying2)
+        get_problems(n, kwargs_, varying)
+    else
+        get_problems_with_secondary_variation(n, kwargs_, varying, varying2)
+    end
+
+    return Scenario(
+        n, n_steps, n_steps2,
+        varying, varying2,
+        problems
+    )
+end
+
+function get_problems(n, kwargs_in, varying)
+    n_steps = length(kwargs_in[varying])
+    kwargs_list = [
+        Dict(
+            k => if k == varying
+                    v[i]
+                else
+                    v
+                end
+            for (k, v) in kwargs_in
+        )
+        for i in 1:n_steps
+    ]
+    return [Problem(n = n; kwargs...) for kwargs in kwargs_list]
+end
+
+function get_problems_with_secondary_variation(n, kwargs_in, varying, varying2)
+    n_steps = length(kwargs_in[varying])
+    n_steps_secondary = length(kwargs_in[varying2])
+    problems = Array{Problem, 2}(undef, n_steps, n_steps_secondary)
+    for i in 1:n_steps, j in 1:n_steps_secondary
+        kwargs = Dict(
+            k => if k == varying
+                    v[i]
+                elseif k == varying2
+                    v[j]
+                else
+                    v
+                end
+            for (k, v) in kwargs_in
+        )
+        problems[i, j] = Problem(n = n; kwargs...)
+    end
+    return problems
+end
+
+function get_problem(scenario::Scenario, index)
+    return scenario.problems[index]
+end
+
+function extract(scenario::Scenario, field::Symbol)
+    out = Array{Any}(undef, scenario.n_steps, scenario.n_steps2)
+    for i in 1:scenario.n_steps, j in 1:scenario.n_steps2
+        problem = scenario.problems[i, j]
+        out[i, j] = if field in (:A, :α, :B, :β, :θ)
+            getfield(problem.prodFunc, field)
+        elseif field == :r && problem.costFunc isa FixedUnitCost
+            problem.costFunc.r
+        elseif field == :rs && problem.costFunc isa FixedUnitCost2
+            problem.costFunc.r[:, 1]
+        elseif field == :rp && problem.costFunc isa FixedUnitCost2
+            problem.costFunc.r[:, 2]
+        else
+            getfield(problem, field)
         end
     end
-    return scenario
+    return out
 end
+
 
 
 struct ScenarioResult{T <: Union{SolverResult, Vector{SolverResult}}, N}
@@ -82,106 +131,11 @@ end
 
 
 function extract(res::ScenarioResult{SolverResult, 1}, field::Symbol)
-    if field in (:success, :Xs, :Xp, :s, :p, :σ, :payoffs)
+    return if field in (:success, :Xs, :Xp, :s, :p, :σ, :payoffs)
         [getfield(x, field) for x in res.solverResults]
     else
         getfield(res.scenario, field)
     end
-end
-
-function get_params(scenario::Scenario)
-    varying = transpose(getfield(scenario, scenario.varying))
-    n_steps = size(varying, 2)
-    
-    A = similar(scenario.A, (scenario.n_players, n_steps))
-    α = similar(scenario.α, (scenario.n_players, n_steps))
-    B = similar(scenario.B, (scenario.n_players, n_steps))
-    β = similar(scenario.β, (scenario.n_players, n_steps))
-    θ = similar(scenario.θ, (scenario.n_players, n_steps))
-    d = similar(scenario.d, (scenario.n_players, n_steps))
-    r = similar(scenario.r, (scenario.n_players, n_steps))
-
-    # create stacks of variables to send to solver
-    # everything needs to have shape n_players x n_steps
-    for (newvar, symbol) in zip((A, α, B, β, θ, d, r), (:A, :α, :B, :β, :θ, :d, :r))
-        if symbol == scenario.varying
-            copy!(newvar, varying)
-        else
-            var = getfield(scenario, symbol)
-            copy!(
-                newvar,
-                reshape(
-                    repeat(
-                        reshape(var, :), n_steps
-                    ),
-                    size(var)..., n_steps
-                )
-            )
-        end
-    end
-    return A, α, B, β, θ, d, r
-end
-
-function get_params_with_secondary_variation(scenario::Scenario)
-    varying = transpose(getfield(scenario, scenario.varying))
-    n_steps = size(varying, 2)
-    varying2 = transpose(getfield(scenario, scenario.varying2))
-    n_steps_secondary = size(varying2, 2)
-    # create stacks of variables to send to solver
-    # everything needs to have shape n_players x n_steps x n_steps_secondary
-    A = similar(scenario.A, (scenario.n_players, n_steps, n_steps_secondary))
-    α = similar(scenario.α, (scenario.n_players, n_steps, n_steps_secondary))
-    B = similar(scenario.B, (scenario.n_players, n_steps, n_steps_secondary))
-    β = similar(scenario.β, (scenario.n_players, n_steps, n_steps_secondary))
-    θ = similar(scenario.θ, (scenario.n_players, n_steps, n_steps_secondary))
-    d = similar(scenario.d, (scenario.n_players, n_steps, n_steps_secondary))
-    r = similar(scenario.r, (scenario.n_players, n_steps, n_steps_secondary))
-    for (newvar, symbol) in zip((A, α, B, β, θ, d, r), (:A, :α, :B, :β, :θ, :d, :r))
-        if symbol == scenario.varying
-            copyto!(
-                newvar,
-                repeat(varying, outer = (1, n_steps_secondary))
-            )
-        elseif symbol == scenario.varying2
-            copyto!(
-                newvar,
-                repeat(varying2, inner = (1, n_steps))
-            )
-        else
-            var = getfield(scenario, symbol)
-            copyto!(
-                newvar,
-                repeat(var, inner = (1, n_steps), outer = (1, n_steps_secondary))
-            )
-        end
-    end
-    return A, α, B, β, θ, d, r
-end
-
-function get_problem_from_scenario(scenario::Scenario, index)
-    idx = Tuple(index)
-    if length(idx) == 1
-        @assert isnothing(scenario.varying2)
-    end
-    (A, α, B, β, θ, d, r) = if isnothing(scenario.varying2)
-        get_params(scenario)
-    else
-        get_params_with_secondary_variation(scenario)
-    end
-
-    return Problem(
-        scenario.n_players,
-        d[:, idx...], r[:, idx...],
-        ProdFunc(
-            scenario.n_players,
-            A[:, idx...], α[:, idx...],
-            B[:, idx...], β[:, idx...],
-            θ[:, idx...]
-        ),
-        scenario.riskFunc,
-        scenario.csf,
-        scenario.payoffFunc
-    )
 end
 
 
@@ -191,19 +145,16 @@ function setup_results(scenario::Scenario, method)
     if !isnothing(scenario.varying2)
         @assert method != :scatter && method != :mixed "Secondary variation is unsupported with the mixed or scatter solvers."
 
-        n_steps = size(getfield(scenario, scenario.varying), 1)
-        n_steps_secondary = size(getfield(scenario, scenario.varying2), 1)
         return if method in (:mixed, :scatter)
-            Array{Vector{SolverResult}}(undef, (n_steps, n_steps_secondary))
+            Array{Vector{SolverResult}}(undef, (scenario.n_steps, scenario.n_steps2))
         else
-            Array{SolverResult}(undef, (n_steps, n_steps_secondary))
+            Array{SolverResult}(undef, (scenario.n_steps, scenario.n_steps2))
         end
     else
-        n_steps = size(getfield(scenario, scenario.varying), 1)
         return if method in (:mixed, :scatter)
-            Array{Vector{SolverResult}}(undef, n_steps)
+            Array{Vector{SolverResult}}(undef, scenario.n_steps)
         else
-            Array{SolverResult}(undef, n_steps)
+            Array{SolverResult}(undef, scenario.n_steps)
         end
     end
 end
@@ -213,7 +164,7 @@ function fill_results!(results, scenario, method, options, indices = nothing)
         indices = CartesianIndices(size(results))
     end
     Threads.@threads for index in indices
-        problem = get_problem_from_scenario(scenario, index)
+        problem = get_problem(scenario, index)
         results[index] = solve(problem, method, options)
     end
 end
@@ -305,14 +256,14 @@ beliefs determine how each player's belief is different from baseProblem
 """
 struct ScenarioWithBeliefs{T} <: AbstractScenario
     baseScenario::Scenario{T}
-    beliefs::Vector{Dict{Symbol, Vector{T}}}
+    beliefs::Vector{Dict{Symbol, Any}}
 end
 
 function ScenarioWithBeliefs(
     baseScenario = Scenario();
-    beliefs = fill(Dict(), Scenario().n_players)
+    beliefs = fill(Dict(), Scenario().n)
 )
-    n = baseScenario.n_players
+    n = baseScenario.n
     @assert length(beliefs) == n
     # expand beliefs so values are vectors of length n
     beliefs_ = [
@@ -325,67 +276,19 @@ function ScenarioWithBeliefs(
     return ScenarioWithBeliefs(baseScenario, beliefs_)
 end
 
-function replace_belief(baseObj, field::Symbol, belief::Dict)
-    return if field in keys(belief)
-        belief[field]
-    else
-        getfield(baseObj, field)
-    end
-end
-
 function setup_results(scenario::ScenarioWithBeliefs, method)
     return setup_results(scenario.baseScenario, method)
 end
 
-function get_problem_from_scenario(scenario::ScenarioWithBeliefs, index)
+function get_problem(scenario::ScenarioWithBeliefs, index)
     idx = Tuple(index)
     if length(idx) == 1
         @assert isnothing(scenario.baseScenario.varying2)
     end
-    (A, α, B, β, θ, d, r) = if isnothing(scenario.baseScenario.varying2)
-        get_params(scenario.baseScenario)
-    else
-        get_params_with_secondary_variation(scenario.baseScenario)
-    end
 
-    baseProblem = Problem(
-        scenario.baseScenario.n_players,
-        d[:, idx...], r[:, idx...],
-        ProdFunc(
-            scenario.baseScenario.n_players,
-            A[:, idx...], α[:, idx...],
-            B[:, idx...], β[:, idx...],
-            θ[:, idx...]
-        ),
-        scenario.baseScenario.riskFunc,
-        scenario.baseScenario.csf,
-        scenario.baseScenario.payoffFunc
-    )
+    baseProblem = scenario.baseScenario.problems[index]
 
-    beliefs = [
-        Problem(
-            scenario.baseScenario.n_players,
-            replace_belief(baseProblem, :d, belief),
-            ProdFunc(
-                scenario.baseScenario.n_players,
-                replace_belief(baseProblem.prodFunc, :A, belief),
-                replace_belief(baseProblem.prodFunc, :α, belief),
-                replace_belief(baseProblem.prodFunc, :B, belief),
-                replace_belief(baseProblem.prodFunc, :β, belief),
-                replace_belief(baseProblem.prodFunc, :θ, belief)
-            ),
-            scenario.baseScenario.riskFunc,
-            scenario.baseScenario.csf,
-            scenario.baseScenario.payoffFunc,
-            FixedUnitCost(
-                scenario.baseScenario.n_players,
-                replace_belief(baseProblem.costFunc, :r, belief)
-            ),
-        )
-        for belief in scenario.beliefs
-    ]
-
-    return ProblemWithBeliefs(baseProblem, beliefs = beliefs)
+    return ProblemWithBeliefs(baseProblem, scenario.beliefs)
 end
 
 function ScenarioResult(scenario::ScenarioWithBeliefs, results)

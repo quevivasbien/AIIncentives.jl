@@ -27,7 +27,7 @@ function test_scenarios()
     println("Running test on `scenarios.jl` + `plotting.jl`...")
 
     scenario = Scenario(
-        n_players = 2,
+        n = 2,
         α = [0.5, 0.75],
         θ = [0., 0.5],
         r = range(0.01, 0.1, length = Threads.nthreads()),

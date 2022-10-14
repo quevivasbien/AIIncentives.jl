@@ -2,6 +2,7 @@
 
 function as_Float64_Array(x::Union{Real, AbstractArray}, n::Int)
     if isa(x, AbstractArray)
+        @assert length(x) == n
         return convert(Array{Float64}, x)
     end
     return fill(convert(Float64, x), n)

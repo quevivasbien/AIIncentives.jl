@@ -19,7 +19,7 @@ struct LinearPayoff{T <: Real} <: PayoffFunc
     b_lose::Vector{T}
 end
 
-function LinearPayoff(; n = 2, a_win = 1., b_win = 0., a_lose = 0., b_lose = 0.)
+function LinearPayoff(n = 2; a_win = 1., b_win = 0., a_lose = 0., b_lose = 0.)
     linearPayoff = LinearPayoff(
         n,
         as_Float64_Array(a_win, n),

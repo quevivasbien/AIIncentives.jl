@@ -2,12 +2,12 @@
 
 function get_values_for_plot(results::Vector{SolverResult}, exclude_failed = true)
     n_steps = length(results)
-    n_players = size(results[1].Xs, 1)
-    Xs = fill(NaN, n_steps, n_players)
-    Xp = fill(NaN, n_steps, n_players)
-    s = fill(NaN, n_steps, n_players)
-    p = fill(NaN, n_steps, n_players)
-    payoffs = fill(NaN, n_steps, n_players)
+    n = size(results[1].Xs, 1)
+    Xs = fill(NaN, n_steps, n)
+    Xp = fill(NaN, n_steps, n)
+    s = fill(NaN, n_steps, n)
+    p = fill(NaN, n_steps, n)
+    payoffs = fill(NaN, n_steps, n)
     total_safety = fill(NaN, n_steps)
     for (i, r) in enumerate(results)
         if r.success || !exclude_failed
@@ -132,22 +132,22 @@ function get_colors(n_lines)
     return HSV.(range(240, step = 25, length = n_lines), 1., 1.) |> to_rowvec
 end
 
-function get_color_palettes(n_lines, n_players)
+function get_color_palettes(n_lines, n)
     return [
         palette(
-            HSV.(hue, range(1., 0.4, length = n_players), range(0.5, 1., length = n_players))
+            HSV.(hue, range(1., 0.4, length = n), range(0.5, 1., length = n))
         ) for hue in range(240, step = 25, length = n_lines)
     ] 
 end
 
 function get_values_for_plot(results::Array{SolverResult, 2}, exclude_failed = true)
     (n_steps, n_steps_secondary) = size(results)
-    n_players = size(results[1, 1].Xs, 1)
-    Xs = fill(NaN, n_steps, n_steps_secondary, n_players)
-    Xp = fill(NaN, n_steps, n_steps_secondary, n_players)
-    s = fill(NaN, n_steps, n_steps_secondary, n_players)
-    p = fill(NaN, n_steps, n_steps_secondary, n_players)
-    payoffs = fill(NaN, n_steps, n_steps_secondary, n_players)
+    n = size(results[1, 1].Xs, 1)
+    Xs = fill(NaN, n_steps, n_steps_secondary, n)
+    Xp = fill(NaN, n_steps, n_steps_secondary, n)
+    s = fill(NaN, n_steps, n_steps_secondary, n)
+    p = fill(NaN, n_steps, n_steps_secondary, n)
+    payoffs = fill(NaN, n_steps, n_steps_secondary, n)
     total_safety = fill(NaN, n_steps, n_steps_secondary)
     for i in 1:n_steps, j in 1:n_steps_secondary
         if results[i, j].success || !exclude_failed
@@ -164,8 +164,8 @@ end
 
 function are_players_same(results::Array{SolverResult, 2})
     (n_steps, n_steps_secondary) = size(results)
-    n_players = size(results[1, 1].Xs)[1]
-    strats = Array{Float64}(undef, n_steps, n_steps_secondary, n_players, 2)
+    n = size(results[1, 1].Xs)[1]
+    strats = Array{Float64}(undef, n_steps, n_steps_secondary, n, 2)
     for i in 1:n_steps, j in n_steps_secondary
         strats[i, j, :, 1] = results[i, j].Xs
         strats[i, j, :, 2] = results[i, j].Xp
@@ -175,7 +175,7 @@ function are_players_same(results::Array{SolverResult, 2})
             strats[:, :, 1, :] - strats[:, :, i, :],
             zeros(n_steps, n_steps_secondary, 2),
             atol=1e-2
-        ) for i in 2:n_players
+        ) for i in 2:n
     )
 end
 
@@ -199,6 +199,7 @@ function _plot_helper_same(xvals, Xs, Xp, s, p, total_safety, payoffs, xlabel, l
     total_safety_plt = plot(
         xvals, total_safety,
         xlabel = xlabel, ylabel = "σ",
+        labels = labels,
         colors = colors;
         kwargs...
     )
@@ -206,8 +207,8 @@ function _plot_helper_same(xvals, Xs, Xp, s, p, total_safety, payoffs, xlabel, l
 end
 
 function _plot_helper_het(xvals, Xs, Xp, s, p, total_safety, payoffs, xlabel, labels; kwargs...)
-    (_, n_steps_secondary, n_players) = size(s)
-    palettes = get_color_palettes(n_steps_secondary, n_players)
+    (_, n_steps_secondary, n) = size(s)
+    palettes = get_color_palettes(n_steps_secondary, n)
     colors = get_colors(n_steps_secondary)
     (Xp_plt, Xs_plt, perf_plt, safety_plt, payoff_plt) = (
         plot(
@@ -224,7 +225,7 @@ function _plot_helper_het(xvals, Xs, Xp, s, p, total_safety, payoffs, xlabel, la
         kwargs...
     )
     for i in 1:n_steps_secondary
-        labelsi = reshape(["$(labels[i]), player $j" for j in 1:n_players], 1, :)
+        labelsi = reshape(["$(labels[i]), player $j" for j in 1:n], 1, :)
         for (plt, x) in zip(
             (Xp_plt, Xs_plt, perf_plt, safety_plt, payoff_plt),
             (Xp, Xs, p, s, payoffs)
@@ -271,12 +272,11 @@ function create_plot(results::Array{SolverResult, 2}, xvals, xlabel, labels, log
 end
 
 function get_xvals_for_result_plot(res::ScenarioResult)
-    varying = getfield(res.scenario, res.scenario.varying)
-    n_steps = size(varying, 1)
+    varying = reduce(vcat, transpose.(extract(res.scenario, res.scenario.varying)[:, 1]))
     return if varying[:, 2] == varying[:, 1]
         varying[:, 1]
     else
-        1:n_steps
+        1:scenario.n_steps
     end
 end
 
@@ -288,11 +288,17 @@ function get_labels_for_plot(res::ScenarioResult, labels = nothing)
             labels
         end
     elseif isnothing(res.scenario.varying2)
-        ["player $i" for i in 1:res.scenario.n_players] |> to_rowvec
+        ["player $i" for i in 1:res.scenario.n] |> to_rowvec
     else
-        varying2 = getfield(res.scenario, res.scenario.varying2)
-        n_steps_secondary = size(varying2, 1)
-        ["$(res.scenario.varying2) = $(varying2[i, :])" for i in 1:n_steps_secondary] |> to_rowvec
+        varying2 = reduce(
+            vcat,
+            transpose.(extract(res.scenario, res.scenario.varying2)[1, :])
+        )
+        if varying2[:, 2] == varying2[:, 1]
+            ["$(res.scenario.varying2) = $v" for v in varying2[:, 1]]
+        else
+            ["$(res.scenario.varying2) = $v" for v in rows(varying2)]
+        end |> to_rowvec
     end
 end
 

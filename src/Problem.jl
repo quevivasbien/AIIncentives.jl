@@ -21,21 +21,23 @@ end
 @doc raw"""
 The `Problem.jl` file implements a `Problem` type that represents the payoff function
 
-$$u_i := \sum_{j=1}^n \sigma_j(s) q_j(p) \rho_{ij}(p) - \left( 1 - \sum_{j=1}^n \sigma_j(s) q_j(p) \right) d_i - r_i(X_{i,s} + X_{i,p})$$
+$$u_i := \sum_{j=1}^n \sigma_j(s) q_j(p) \rho_{ij}(p) - \left( 1 - \sum_{j=1}^n \sigma_j(s) q_j(p) \right) d_i - c_i(X_s, X_p)$$
 
 You can construct a `Problem` like this:
 ```julia
 problem = Problem(
-    n_players = 2,  # default is 2
+    n = 2,  # default is 2
     d = 1.,
     r = 0.05,
     prodFunc = yourProdFunc,
     riskFunc = yourRiskFunc,  # default is WinnerOnlyRisk()
     csf = yourCSF,  # default is BasicCSF()
-    payoffFunc = yourPayoffFunc  # default is LinearPayoff(1, 0, 0, 0)
+    payoffFunc = yourPayoffFunc,  # default is LinearPayoff(1, 0, 0, 0)
 )
 ```
-Note that the lengths of `d` and `r` must match and be equal to `n` and `prodFunc.n_players`. Again, you can omit arguments to use default values or provide vectors instead of scalars if you want different values for each player.
+Note that the lengths of `d` and `r` must match and be equal to `n` and `prodFunc.n`. Again, you can omit arguments to use default values or provide vectors instead of scalars if you want different values for each player.
+
+Instead of providing `r`, you can provide a `CostFunc` with the keyword `costFunc`, e.g., `costFunc = FixedUnitCost(2, [0.1, 0.1])`. If you just provide `r`, it will be interpreted as `costFunc = FixedUnitCost(n, r)`.
 
 To calculate the payoffs for all the players, you can do
 ```julia
@@ -79,34 +81,127 @@ function Problem(
     return Problem(n, d, prodFunc, riskFunc, csf, payoffFunc, FixedUnitCost(n, r))
 end
 
+"""
+constructor for problem, where defaults will be overridden by provided kwargs
+    mostly just a helper, probably shouldn't be called by user
+"""
+function Problem_with_defaults(
+    default_d,
+    default_costFunc,
+    default_prodFunc,
+    default_riskFunc,
+    default_csf,
+    default_payoffFunc
+    ;
+    n::Int = 2,
+    kwargs...
+)
+    @assert n >= 2
+    d = if haskey(kwargs, :d)
+        as_Float64_Array(kwargs[:d], n)
+    else
+        default_d
+    end
+    costFunc = if haskey(kwargs, :costFunc)
+        kwargs[:costFunc]
+    elseif haskey(kwargs, :rs) && haskey(kwargs, :rp)
+        FixedUnitCost2(as_Float64_Array(kwargs[:rs], n), as_Float64_Array(kwargs[:rp], n))
+    elseif haskey(kwargs, :r)
+        FixedUnitCost(n, as_Float64_Array(kwargs[:r], n))
+    else
+        default_costFunc
+    end
+    @assert n == costFunc.n
+    prodFunc = if haskey(kwargs, :prodFunc)
+        kwargs[:prodFunc]
+    else
+        prodFunc_kwargs = (
+            key => as_Float64_Array(val, n) for (key, val) in kwargs
+                if key in (:A, :α, :B, :β, :θ)
+        )
+        if isempty(prodFunc_kwargs)
+            default_prodFunc
+        else
+            ProdFunc(n = n; prodFunc_kwargs...)
+        end
+    end
+    @assert n == prodFunc.n
+    riskFunc = if haskey(kwargs, :riskFunc)
+        kwargs[:riskFunc]
+    else
+        default_riskFunc
+    end
+    csf = if haskey(kwargs, :csf)
+        kwargs[:csf]
+    else
+        default_csf
+    end
+    payoffFunc = if haskey(kwargs, :payoffFunc)
+        kwargs[:payoffFunc]
+    else
+        default_payoffFunc
+    end
+    @assert n == payoffFunc.n
+
+    return Problem(n, d, prodFunc, riskFunc, csf, payoffFunc, costFunc)
+end
+
+"""
+Handy multi-purpose constructor for `Problem` type
+
+`d` can be provided as a scalar or a vector of length `n`,
+if not provided, defaults to 0
+
+to specify the costFunc to use, provide one of the following:
+- `costFunc`, which isa pre-constructed `CostFunc`
+- `rs` and `rp` as scalars or vectors of length `n`; this will be interpreted as `FixedUnitCost(rs, rp)`
+- `r` as a scalar or vector of length `n`; this will be interpreted as `FixedUnitCost([n,] r)`
+If you provide more than one of the above, the first one in the list above will be used.
+If none of the above are provided, will default to `FixedUnitCost(n, 0.1)`
+
+to specify the prodFunc to use, provide one of the following:
+- `prodFunc`, which isa pre-constructed `ProdFunc`
+- arguments for `ProdFunc` constructor, e.g., one or more of (A, α, B, β, θ)
+If you provide more than one of the above, the first one in the list above will be used.
+If none of the above are provided, will default to `ProdFunc()`
+
+riskFunc, csf, and payoffFunc can be provided as pre-constructed objects;
+otherwise defaults `riskFunc = WinnerOnlyRisk()`, `csf = BasicCSF()`, `payoffFunc = LinearPayoff(n)` will be used
+"""
 function Problem(
     ;
     n::Int = 2,
-    d::Union{Real, AbstractVector} = 0.,
-    r::Union{Real, AbstractVector} = 0.1,
-    riskFunc::RiskFunc = WinnerOnlyRisk(),
-    prodFunc::ProdFunc{Float64} = ProdFunc(),
-    csf::CSF = BasicCSF(),
-    payoffFunc::PayoffFunc = LinearPayoff(),
-    costFunc::Union{Nothing, CostFunc} = nothing,
+    kwargs...
 )
-    @assert n >= 2 "n must be at least 2"
-    @assert n == prodFunc.n "n must match prodFunc.n"
-    @assert n == payoffFunc.n "n must match payoffFunc.n"
-    if isnothing(costFunc)
-        costFunc = FixedUnitCost(n, as_Float64_Array(r, n))
-    end
-    @assert n == costFunc.n "n must match costFunc.n"
-    problem = Problem(
-        n,
-        as_Float64_Array(d, n),
-        prodFunc,
-        riskFunc,
-        csf,
-        payoffFunc,
-        costFunc
+    return Problem_with_defaults(
+        zeros(n),
+        FixedUnitCost(n, fill(0.1, n)),
+        ProdFunc(),
+        WinnerOnlyRisk(),
+        BasicCSF(),
+        LinearPayoff(n),
+        n = n;
+        kwargs...
     )
-    return problem
+end
+
+"""
+Construct a problem from a pre-built problem, with some changes
+"""
+function Problem(
+    problem::Problem;
+    kwargs...
+)
+    Problem_with_defaults(
+        problem.d,
+        problem.costFunc,
+        problem.prodFunc,
+        problem.riskFunc,
+        problem.csf,
+        problem.payoffFunc,
+        n = problem.n;
+        kwargs...
+    )
 end
 
 function get_payoff(problem::Problem, i::Int, Xs::Vector, Xp::Vector)
@@ -210,3 +305,13 @@ is_symmetric(problem::ProblemWithBeliefs) = (
     && is_symmetric(problem.beliefs[1])
     && all(problem.beliefs[1] == b for b in problem.beliefs[2:end])
 )
+
+function ProblemWithBeliefs(
+    baseProblem,
+    beliefs::Vector{Dict{Symbol, Any}}
+)
+    return ProblemWithBeliefs(
+        baseProblem,
+        [Problem(baseProblem; kwargs...) for kwargs in beliefs]
+    )
+end

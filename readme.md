@@ -12,7 +12,7 @@ for *i = 1, ..., n*. The *X* are inputs chosen by the players, and all other var
 
 In a Nash equilibrium, each player *i* chooses *X<sub>s,i</sub>* and *X<sub>p,i</sub>* to maximize the payoff
 
-$$u_i := \sum_{j=1}^n \sigma_j(s) q_j(p) \rho_{ij}(p) - \left( 1 - \sum_{j=1}^n \sigma_j(s) q_j(p) \right) d_i - r_i(X_{i,s} + X_{i,p})$$
+$$u_i := \sum_{j=1}^n \sigma_j(s) q_j(p) \rho_{ij}(p) - \left( 1 - \sum_{j=1}^n \sigma_j(s) q_j(p) \right) d_i - c_i(X_s, X_p)$$
 
 subject to the other players' choices of *X<sub>s</sub>* and *X<sub>p</sub>*. The components of this expression will be explained more below, but the basic parts are as follows:
 
@@ -20,7 +20,7 @@ subject to the other players' choices of *X<sub>s</sub>* and *X<sub>p</sub>*. Th
 * *&sigma;<sub>i</sub>(s)* is the probability of a safe outcome given that player *i* wins the contest.
 * *&rho;<sub>ij</sub>(p)* is player *i*'s payoff if player *j* wins the contest, and the outcome is safe.
 * *d<sub>i</sub>* is the cost incurred by player *i* in the event of an unsafe (disaster) outcome.
-* *r<sub>i</sub>* is the price that player *i* pays for each unit of *X<sub>i</sub>*.
+* *c<sub>i</sub>(X<sub>s</sub>, X<sub>p</sub>)* is the price that player *i* pays for the inputs.
 
 Note that the weighted sum *&Sigma;<sub>i</sub> &sigma;<sub>i</sub> q<sub>i</sub>* is the unconditional probability of a safe outcome (no disaster). 
 
@@ -30,19 +30,18 @@ If you don't have Julia, download it from https://julialang.org/downloads/ and i
 ```
 ] add Optim, NLsolve, Plots
 ```
-(You need to type the left square brace, as that denotes that you want to enter Pkg mode.) Those dependencies will now be installed, so you won't have to repeat that last step in the future.
+(You need to type the right square brace, as that denotes that you want to enter Pkg mode.) Those dependencies will now be installed, so you won't have to repeat that last step in the future.
 
-Next, you'll need to download the code from this project's GitHub repository (if you haven't already). Save it wherever you want on your computer.
+Next, you'll need to download the code from this project's GitHub repository (if you haven't already). Save it wherever you want on your computer. It's best to use git, or the GitHub CLI or desktop app, to do this so it's easy to stay in synch with the latest version.
 
 At this point, the easiest way to load the project code is to open a new Julia session in the project directory -- from your computer's terminal, navigate to the project directory and run:
 ```bash
-/path/to/AIIncentives.jl$ julia --project --threads=auto
+julia --project --threads=auto
 ```
-or, from an arbitrary directory,
+or, from an arbitrary directory:
 ```bash
-/any/dir$ julia --project=/path/to/AIIncentives.jl --threads=auto
+julia --project=/path/to/AIIncentives.jl --threads=auto
 ```
-where `/path/to/AIIncentives.jl`, is of course the directory where you've cloned this repository.
 
 (The `--project` flag allows you to import the project with the `using` keyword, and the `--threads=auto` flag allows Julia to use all of your computer's CPU cores, which can speed some tasks up significantly.)
 
@@ -53,7 +52,7 @@ Then, to load the project code, just run `using AIIncentives` in your new Julia 
 You can then create and solve a scenario like
 ```julia
 scenario = Scenario(
-    n_players = 2,
+    n = 2,
     A = 10.,
     α = 0.5,
     B = 10.,
@@ -88,7 +87,7 @@ $$f(X_s, X_p) = (AX_s^\alpha (BX_p^\beta)^{-\theta},\ BX_p^\beta)$$
 describing how the inputs *X<sub>s</sub>* and *X<sub>p</sub>* produce safety and performance for all players. You can create an instance of the `ProdFunc` type like
 ```julia
 prodFunc = ProdFunc(
-    n_players = 2,
+    n = 2,
     A = 10.,
     α = 0.5,
     B = 10.,
@@ -96,10 +95,10 @@ prodFunc = ProdFunc(
     θ = 0.25
 )
 ```
-If you want to supply different parameters for each player or just like typing more stuff out, you can also supply the parameters as vectors of equal length (equal to `n_players`). The following creates the same object as the example above:
+If you want to supply different parameters for each player or just like typing more stuff out, you can also supply the parameters as vectors of equal length (equal to `n`). The following creates the same object as the example above:
 ```julia
 prodFunc = ProdFunc(
-    n_players = 2,
+    n = 2,
     A = [10., 10.],
     α = [0.5, 0.5],
     B = [10., 10.],
@@ -109,6 +108,15 @@ prodFunc = ProdFunc(
 ```
 If you omit a keyword argument, it will be set at a default value.
 
+[A somewhat tangential tip: in general, if you want to see the different ways you can call something, you can use Julia's handy `methods` function. For example, to see the constructors available for `ProdFunc`, you can call `methods(ProdFunc)`, which will return something like:
+```
+# 3 methods for type constructor:
+[1] ProdFunc(; n, A, α, B, β, θ) in Main at ~/Documents/code/AIIncentives.jl/src/ProdFunc.jl:57
+[2] ProdFunc(n::Int64, A::Vector{T}, α::Vector{T}, B::Vector{T}, β::Vector{T}, θ::Vector{T}) where T<:Real in Main at ~/Documents/code/AIIncentives.jl/src/ProdFunc.jl:49
+[3] ProdFunc(A, α, B, β, θ) in Main at ~/Documents/code/AIIncentives.jl/src/ProdFunc.jl:79
+```
+This tells us that we can make a new `ProdFunc` by [1] providing keyword arguments, like in the examples shown above (anything after a semicolon in a Julia function definition is a keyword argument), or [2]-[3] providing all the required arguments in order.]
+
 To determine the outputs for all players, you can do
 ```julia
 (s, p) = f(prodFunc, Xs, Xp)
@@ -117,7 +125,7 @@ or, equivalently,
 ```julia
 (s, p) = prodFunc(Xs, Xp)
 ```
-where `Xs` and `Xp` are vectors of length equal to `prodFunc.n_players`. Here `s` and `p` will be vectors representing the safety and performance of each player. To get the safety and performance of a single player with index `i`, just do
+where `Xs` and `Xp` are vectors of length equal to `prodFunc.n`. Here `s` and `p` will be vectors representing the safety and performance of each player. To get the safety and performance of a single player with index `i`, just do
 ```julia
 (s, p) = f(prodFunc, i, xs, xp)
 ```
@@ -169,25 +177,37 @@ for constants *a<sub>w</sub>*, *b_<sub>w</sub>*, *a<sub>l</sub>*, and *b<sub>l</
 
 As a default, it is assumed that *a<sub>w</sub> = 1* and *b<sub>w</sub> = a<sub>l</sub> = b<sub>l</sub> = 0*, so a player gets a payoff of 1 if they win, and a payoff of zero otherwise.
 
+### The `CostFunc` type
+
+The `CostFunc.jl` file implements a `CostFunc` type, which controls the cost *c<sub>i</sub>* that players pay to use inputs *X<sub>s</sub>*, *X<sub>p</sub>*. The default `CostFunc` is `FixedUnitCost`, which represents the case where players pay a constant marginal cost *r* for *X<sub>s</sub>* and *X<sub>p</sub>*, described by
+$$c_i(X_s, X_p) = r_i(X_{s,i} + X_{p,i}).$$
+
+Notice that `FixedUnitCost` uses the same unit cost for both *X<sub>s</sub>* and *X<sub>p</sub>*, although we can provide a different *r<sub>i</sub>* for each player. If we want to allow *X<sub>s</sub>* and *X<sub>p</sub>* to have different unit costs, we can use `FixedUnitCost2`, which implements
+$$c_i(X_s, X_p) = r_{s,i} X_{s,i} + r_{p,i} X_{p,i}.$$
+
+There are a few other options for `CostFunc`s defined, which you can play with if you want to go poking around in the `CostFunc.jl` file. And, of course, you can always define your own.
+
 ### The `Problem` type
 
 The `Problem.jl` file implements a `Problem` type that represents the payoff function
 
-$$u_i := \sum_{j=1}^n \sigma_j(s) q_j(p) \rho_{ij}(p) - \left( 1 - \sum_{j=1}^n \sigma_j(s) q_j(p) \right) d_i - r_i(X_{i,s} + X_{i,p})$$
+$$u_i := \sum_{j=1}^n \sigma_j(s) q_j(p) \rho_{ij}(p) - \left( 1 - \sum_{j=1}^n \sigma_j(s) q_j(p) \right) d_i - c_i(X_s, X_p)$$
 
 You can construct a `Problem` like this:
 ```julia
 problem = Problem(
-    n_players = 2,  # default is 2
+    n = 2,  # default is 2
     d = 1.,
     r = 0.05,
     prodFunc = yourProdFunc,
     riskFunc = yourRiskFunc,  # default is WinnerOnlyRisk()
     csf = yourCSF,  # default is BasicCSF()
-    payoffFunc = yourPayoffFunc  # default is LinearPayoff(1, 0, 0, 0)
+    payoffFunc = yourPayoffFunc,  # default is LinearPayoff(1, 0, 0, 0)
 )
 ```
-Note that the lengths of `d` and `r` must match and be equal to `n` and `prodFunc.n_players`. Again, you can omit arguments to use default values or provide vectors instead of scalars if you want different values for each player.
+Note that the lengths of `d` and `r` must match and be equal to `n` and `prodFunc.n`. Again, you can omit arguments to use default values or provide vectors instead of scalars if you want different values for each player.
+
+Instead of providing `r`, you can provide a `CostFunc` with the keyword `costFunc`, e.g., `costFunc = FixedUnitCost(2, [0.1, 0.1])`. If you just provide `r`, it will be interpreted as `costFunc = FixedUnitCost(n, r)`.
 
 To calculate the payoffs for all the players, you can do
 ```julia
@@ -249,7 +269,7 @@ The `scenarios.jl` file includes some helpful tools for looking at cases where y
 The main type defined here is `Scenario`, which is essentially an object that generates a family of related `Problem`s. You can create a scenario like
 ```julia
 scenario = Scenario(
-    n_players = 2,
+    n = 2,
     A = 10.,
     α = 0.5,
     B = 10.,
@@ -265,7 +285,7 @@ which defines a 2-player scenario where `r` varies over 20 values between 0.01 a
 If we want, we can include a second varying parameter, like so:
 ```julia
 scenario = Scenario(
-    n_players = 2,
+    n = 2,
     A = 10.,
     α = 0.5,
     B = 10.,
@@ -279,10 +299,10 @@ scenario = Scenario(
 ```
 In this example, we look at the problem with every combination of the provided varying and secondary varying parameters. The only difference between the two is that when we plot the results, the varying parameter will vary along the x-axis, while the secondary varying parameter will vary in different series.
 
-In the scenarios we've seen so far, we've provided only single values to the non-varying parameters. If we want the players to have different parameters, we need to provide a vector (with length equal to `n_players`) instead. For example,
+In the scenarios we've seen so far, we've provided only single values to the non-varying parameters. If we want the players to have different parameters, we need to provide a vector (with length equal to `n`) instead. For example,
 ```julia
 scenario = Scenario(
-    n_players = 2,
+    n = 2,
     A = [10., 20.],
     α = 0.5,
     B = 10.,
@@ -298,7 +318,7 @@ gives us a scenario where player 1 has A = 10, and player 2 has A = 20.
 You can also supply `riskFunc`, `csf`, and `payoffFunc` arguments to the scenario constructor if you want to use something other than the defaults, e.g.:
 ```julia
 scenario = Scenario(
-    n_players = 2,
+    n = 2,
     r = range(0.01, 0.1, length = 20),
     varying = :r,
     riskFunc = WinnerOnlyRisk(),

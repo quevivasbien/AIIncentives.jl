@@ -3,10 +3,10 @@ The `ProdFunc.jl` file implements a `ProdFunc` (production function) type that c
 
 $$f(X_s, X_p) = (AX_s^\alpha (BX_p^\beta)^{-\theta},\ BX_p^\beta)$$
 
-describing how the inputs $X_s$ and $X_p$ produce safety and performance for all players. You can create an instance of the `ProdFunc` type like
+describing how the inputs *X<sub>s</sub>* and *X<sub>p</sub>* produce safety and performance for all players. You can create an instance of the `ProdFunc` type like
 ```julia
 prodFunc = ProdFunc(
-    n_players = 2,
+    n = 2,
     A = 10.,
     α = 0.5,
     B = 10.,
@@ -14,10 +14,10 @@ prodFunc = ProdFunc(
     θ = 0.25
 )
 ```
-If you want to supply different parameters for each player or just like typing more stuff out, you can also supply the parameters as vectors of equal length (equal to `n_players`). The following creates the same object as the example above:
+If you want to supply different parameters for each player or just like typing more stuff out, you can also supply the parameters as vectors of equal length (equal to `n`). The following creates the same object as the example above:
 ```julia
 prodFunc = ProdFunc(
-    n_players = 2,
+    n = 2,
     A = [10., 10.],
     α = [0.5, 0.5],
     B = [10., 10.],
@@ -35,7 +35,7 @@ or, equivalently,
 ```julia
 (s, p) = prodFunc(Xs, Xp)
 ```
-where `Xs` and `Xp` are vectors of length equal to `prodFunc.n_players`. Here `s` and `p` will be vectors representing the safety and performance of each player. To get the safety and performance of a single player with index `i`, just do
+where `Xs` and `Xp` are vectors of length equal to `prodFunc.n`. Here `s` and `p` will be vectors representing the safety and performance of each player. To get the safety and performance of a single player with index `i`, just do
 ```julia
 (s, p) = f(prodFunc, i, xs, xp)
 ```
