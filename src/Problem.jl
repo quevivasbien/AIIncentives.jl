@@ -149,12 +149,16 @@ end
 """
 Handy multi-purpose constructor for `Problem` type
 
+provide all params as keyword arguments
+
+if `n` is not provided, it defaults to n = 2
+
 `d` can be provided as a scalar or a vector of length `n`,
 if not provided, defaults to 0
 
 to specify the costFunc to use, provide one of the following:
 - `costFunc`, which isa pre-constructed `CostFunc`
-- `rs` and `rp` as scalars or vectors of length `n`; this will be interpreted as `FixedUnitCost(rs, rp)`
+- `rs` and `rp` as scalars or vectors of length `n`; this will be interpreted as `FixedUnitCost2(rs, rp)`
 - `r` as a scalar or vector of length `n`; this will be interpreted as `FixedUnitCost([n,] r)`
 If you provide more than one of the above, the first one in the list above will be used.
 If none of the above are provided, will default to `FixedUnitCost(n, 0.1)`

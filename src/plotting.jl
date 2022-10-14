@@ -164,9 +164,9 @@ end
 
 function are_players_same(results::Array{SolverResult, 2})
     (n_steps, n_steps_secondary) = size(results)
-    n = size(results[1, 1].Xs)[1]
+    n = size(results[1, 1].Xs, 1)
     strats = Array{Float64}(undef, n_steps, n_steps_secondary, n, 2)
-    for i in 1:n_steps, j in n_steps_secondary
+    for i in 1:n_steps, j in 1:n_steps_secondary
         strats[i, j, :, 1] = results[i, j].Xs
         strats[i, j, :, 2] = results[i, j].Xp
     end

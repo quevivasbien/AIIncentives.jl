@@ -16,6 +16,7 @@ function Scenario(
     varying2::Union{Symbol, Nothing} = nothing,
     kwargs...
 )
+    @assert haskey(kwargs, varying) "Varying param $varying must be in kwargs"
     kwargs_ = Dict(
         k => if k == :varying || k == :varying2
                 if v isa AbstractMatrix

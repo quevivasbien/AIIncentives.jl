@@ -65,7 +65,7 @@ scenario = Scenario(
 
 solution = solve(scenario)
 ```
-(Side note: to use math-related characters in most Julia code, you can typically just type the Latex code then press Tab. For example, `\alpha` + `[Tab]` becomes `α`.)
+[Tip: to use math-related characters in most Julia code, you can typically just type the Latex code then press Tab. For example, `\alpha` + `[Tab]` becomes `α`.]
 
 This will find Nash equilibria over the given parameterization and range of values for `r`. To generate a plot of the result, you can execute
 ```julia
@@ -108,7 +108,7 @@ prodFunc = ProdFunc(
 ```
 If you omit a keyword argument, it will be set at a default value.
 
-[A somewhat tangential tip: in general, if you want to see the different ways you can call something, you can use Julia's handy `methods` function. For example, to see the constructors available for `ProdFunc`, you can call `methods(ProdFunc)`, which will return something like:
+[Tip: in general, if you want to see the different ways you can call something, you can use Julia's handy `methods` function. For example, to see the constructors available for `ProdFunc`, you can call `methods(ProdFunc)`, which will return something like:
 ```
 # 3 methods for type constructor:
 [1] ProdFunc(; n, A, α, B, β, θ) in Main at ~/Documents/code/AIIncentives.jl/src/ProdFunc.jl:57
@@ -173,7 +173,7 @@ $$\rho_{ij}(p) = \begin{cases}
     a_l + b_l p, & i \neq j
 \end{cases}$$
 
-for constants *a<sub>w</sub>*, *b_<sub>w</sub>*, *a<sub>l</sub>*, and *b<sub>l</sub>*.
+for constants *a<sub>w</sub>*, *b<sub>w</sub>*, *a<sub>l</sub>*, and *b<sub>l</sub>*.
 
 As a default, it is assumed that *a<sub>w</sub> = 1* and *b<sub>w</sub> = a<sub>l</sub> = b<sub>l</sub> = 0*, so a player gets a payoff of 1 if they win, and a payoff of zero otherwise.
 
@@ -208,6 +208,47 @@ problem = Problem(
 Note that the lengths of `d` and `r` must match and be equal to `n` and `prodFunc.n`. Again, you can omit arguments to use default values or provide vectors instead of scalars if you want different values for each player.
 
 Instead of providing `r`, you can provide a `CostFunc` with the keyword `costFunc`, e.g., `costFunc = FixedUnitCost(2, [0.1, 0.1])`. If you just provide `r`, it will be interpreted as `costFunc = FixedUnitCost(n, r)`.
+
+[Tip: to get help for a function in Julia, just type `?` then the function name in the Julia REPL. For, example, `?Problem` will give you something like the following:
+
+```
+[...]
+
+Handy multi-purpose constructor for Problem type
+
+  provide all params as keyword arguments
+
+  if n is not provided, it defaults to n = 2
+
+  d can be provided as a scalar or a vector of length n, if not provided, defaults to 0
+
+  to specify the costFunc to use, provide one of the following:
+
+    •  costFunc, which isa pre-constructed CostFunc
+
+    •  rs and rp as scalars or vectors of length n; this will be interpreted as
+       FixedUnitCost2(rs, rp)
+
+    •  r as a scalar or vector of length n; this will be interpreted as
+       FixedUnitCost([n,] r)
+
+  If you provide more than one of the above, the first one in the list above will be
+  used. If none of the above are provided, will default to FixedUnitCost(n, 0.1)
+
+  to specify the prodFunc to use, provide one of the following:
+
+    •  prodFunc, which isa pre-constructed ProdFunc
+
+    •  arguments for ProdFunc constructor, e.g., one or more of (A, α, B, β, θ)
+
+  If you provide more than one of the above, the first one in the list above will be
+  used. If none of the above are provided, will default to ProdFunc()
+
+  riskFunc, csf, and payoffFunc can be provided as pre-constructed objects; otherwise
+  defaults riskFunc = WinnerOnlyRisk(), csf = BasicCSF(), payoffFunc = LinearPayoff(n)
+  will be used
+```
+This gives you some help on how to create a new `Problem`.]
 
 To calculate the payoffs for all the players, you can do
 ```julia
