@@ -18,7 +18,7 @@ function Scenario(
 )
     @assert haskey(kwargs, varying) "Varying param $varying must be in kwargs"
     kwargs_ = Dict(
-        k => if k == :varying || k == :varying2
+        k => if k == varying || k == varying2
                 if v isa AbstractMatrix
                     @assert size(v, 2) == n "$k must have n columns"
                     [x for x in eachrow(v)]

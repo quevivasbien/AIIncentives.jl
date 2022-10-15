@@ -57,23 +57,41 @@ end
 function ProdFunc(
     ;
     n::Int = 2,
-    A::Union{Real, AbstractVector} = 10.,
-    α::Union{Real, AbstractVector} = 0.5,
-    B::Union{Real, AbstractVector} = 10.,
-    β::Union{Real, AbstractVector} = 0.5, 
-    θ::Union{Real, AbstractVector} = 0.5
+    kwargs...
 )
     @assert n >= 2 "n must be at least 2"
-    prodFunc = ProdFunc(
-        n,
-        as_Float64_Array(A, n),
-        as_Float64_Array(α, n),
-        as_Float64_Array(B, n),
-        as_Float64_Array(β, n),
-        as_Float64_Array(θ, n)
-    )
-    @assert all(length(getfield(prodFunc, x)) == n for x in [:A, :α, :B, :β, :θ]) "Your input params need to match the number of players"
-    return prodFunc
+    A = if haskey(kwargs, :A)
+        as_Float64_Array(kwargs[:A], n)
+    else
+        fill(10., n)
+    end
+    α = if haskey(kwargs, :α)
+        as_Float64_Array(kwargs[:α], n)
+    elseif haskey(kwargs, :alpha)
+        as_Float64_Array(kwargs[:alpha], n)
+    else
+        fill(0.5, n)
+    end
+    B = if haskey(kwargs, :B)
+        as_Float64_Array(kwargs[:B], n)
+    else
+        fill(10., n)
+    end
+    β = if haskey(kwargs, :β)
+        as_Float64_Array(kwargs[:β], n)
+    elseif haskey(kwargs, :beta)
+        as_Float64_Array(kwargs[:beta], n)
+    else
+        fill(0.5, n)
+    end
+    θ = if haskey(kwargs, :θ)
+        as_Float64_Array(kwargs[:θ], n)
+    elseif haskey(kwargs, :theta)
+        as_Float64_Array(kwargs[:theta], n)
+    else
+        fill(0.25, n)
+    end
+    return ProdFunc(n, A, α, B, β, θ)
 end
 
 ProdFunc(A, α, B, β, θ) = ProdFunc(n=length(A), A=A, α=α, B=B, β=β, θ=θ)

@@ -65,7 +65,7 @@ scenario = Scenario(
 
 solution = solve(scenario)
 ```
-[Tip: to use math-related characters in most Julia code, you can typically just type the Latex code then press Tab. For example, `\alpha` + `[Tab]` becomes `α`.]
+[Tip: to use math-related characters in most Julia code, you can typically just type the Latex code then press Tab. For example, `\alpha` + `[Tab]` becomes `α`. I've also allowed the spelled-out versions of Greek letters to work in most places in this code; for example, you could use `alpha`, `beta`, and `theta` instead of `α`, `β`, and `θ` in the example above.]
 
 This will find Nash equilibria over the given parameterization and range of values for `r`. To generate a plot of the result, you can execute
 ```julia

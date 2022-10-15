@@ -116,8 +116,8 @@ function Problem_with_defaults(
         kwargs[:prodFunc]
     else
         prodFunc_kwargs = (
-            key => as_Float64_Array(val, n) for (key, val) in kwargs
-                if key in (:A, :α, :B, :β, :θ)
+            key => val for (key, val) in kwargs
+                if key in (:A, :α, :alpha, :B, :β, :beta, :θ, :theta)
         )
         if isempty(prodFunc_kwargs)
             default_prodFunc

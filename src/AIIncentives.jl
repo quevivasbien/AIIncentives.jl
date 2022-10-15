@@ -4,15 +4,23 @@ export
     solve,
     
     ProdFunc,
+
     MultiplicativeRisk,
     AdditiveRisk,
     WinnerOnlyRisk,
+
     LinearPayoff,
     PayoffOnDisaster,
+
+    FixedUnitCost,
+    FixedUnitCost2,
+
     Problem,
     ProblemWithBeliefs,
+
     SolverOptions,
     SolverResult,
+
     Scenario,
     ScenarioResult,
     ScenarioWithBeliefs,
