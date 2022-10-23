@@ -26,13 +26,13 @@ Note that the weighted sum *&Sigma;<sub>i</sub> &sigma;<sub>i</sub> q<sub>i</sub
 
 ## Getting started
 
-If you don't have Julia, download it from https://julialang.org/downloads/ and install. You'll then need to install the packages that this project uses, which with Julia is luckily quite simple: open a console window, type `julia` to enter an interactive Julia session, then run
-```
-] add Optim, NLsolve, Plots
-```
-(You need to type the right square brace, as that denotes that you want to enter Pkg mode.) Those dependencies will now be installed, so you won't have to repeat that last step in the future.
+If you don't have Julia, download it from https://julialang.org/downloads/ and install. (You'll need at least version 1.6.7.)
 
 Next, you'll need to download the code from this project's GitHub repository (if you haven't already). Save it wherever you want on your computer. It's best to use git, or the GitHub CLI or desktop app, to do this so it's easy to stay in synch with the latest version.
+
+There are at this point two ways to import the project code: 
+
+### Method 1
 
 At this point, the easiest way to load the project code is to open a new Julia session in the project directory -- from your computer's terminal, navigate to the project directory and run:
 ```bash
@@ -45,9 +45,38 @@ julia --project=/path/to/AIIncentives.jl --threads=auto
 
 (The `--project` flag allows you to import the project with the `using` keyword, and the `--threads=auto` flag allows Julia to use all of your computer's CPU cores, which can speed some tasks up significantly.)
 
-Then, to load the project code, just run `using AIIncentives` in your new Julia session. If this is the first time you do this, there will be a bit of delay as it precompiles some of the code.
+The first time you do this, you will probably need to run
+```
+] resolve
+```
+to get the package set up (including installing any needed dependencies).
 
-(You can also use the code by launching Julia without specifying a project directory -- e.g., `julia --threads=auto` -- then including `src/includes.jl` -- e.g., from the project directory, `include("src/includes.jl")`. This is better if you're messing around with the project's source code, but otherwise means you will need to recompile more code every time you use it.)
+Then, to load the project code, just run
+```
+using AIIncentives
+```
+in your new Julia session. If this is the first time you do this, there will be a bit of delay as it precompiles some of the code.
+
+### Method 2
+
+As an alternative, you can also use the code by launching Julia without specifying a project directory -- e.g., `julia --threads=auto` -- then including `src/includes.jl` -- e.g., from the project directory, `include("src/includes.jl")`. If you do this, you'll need to make sure you have installed the project's dependencies beforehand. I.e., something like the following should work:
+
+In a terminal from the project directory:
+```bash
+julia --threads=auto
+```
+
+Then, in the Julia REPL:
+```
+] add Optim, NLsolve, Plots
+include("src/includes.jl")
+```
+
+You will only need to `] add` the dependencies the first time you run this. Subsequently, you will just need to `include` the project code.
+
+(This latter method is better if you're messing around with the project's source code, but otherwise means you will need to recompile more code every time you use it.)
+
+---
 
 You can then create and solve a scenario like
 ```julia

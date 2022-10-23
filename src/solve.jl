@@ -144,7 +144,6 @@ function single_iter_for_i(
     try
         res = optimize(
             obj_,
-            # jac_!,
             log.(init_guess),
             options.iter_algo,
             options.iter_options
