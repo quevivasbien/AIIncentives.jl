@@ -12,6 +12,10 @@ function (c::CostFunc)(Xs::AbstractVector, Xp::AbstractVector)
     return cost(c, Xs, Xp)
 end
 
+function cost(c::CostFunc, Xs, Xp)
+    return cost.(Ref(c), 1:c.n, Ref(Xs), Ref(Xp))
+end
+
 struct FixedUnitCost{T <: Real} <: CostFunc
     n::Int
     r::Vector{T}
@@ -100,4 +104,46 @@ end
 
 function is_symmetric(c::LinearCost)
     return all(c.r0[1, :]' .== c.r0[2:end, :]) && all(c.r1[1, :]' .== c.r1[2:end, :])
+end
+
+
+"""
+Represents an arbitrary cost schedule
+`schedule`` should be a function that takes an Int index i and length n vectors Xs and Xp and returns a scalar cost
+Can't infer whether is symmetric, so symmetric param must be provided
+"""
+struct ScheduledCost <: CostFunc
+    n::Int
+    schedule::Function
+    symmetric::Bool
+end
+
+function cost(c::ScheduledCost, i::Int, Xs, Xp)
+    return c.schedule(i, Xs, Xp)
+end
+
+function is_symmetric(c::ScheduledCost)
+    return c.symmetric
+end
+
+
+"""
+Creates a new ScheduledCost object
+where players pay a fixed cost of r0 if their safety is less than a threshold s_thresh and rs otherwise
+"""
+function create_certification_cost(
+    r0::Float64,
+    rs::Float64,
+    s_thresh::Float64,
+    prodFunc::ProdFunc,
+)
+    schedule = function(i::Int, Xs, Xp)
+        (s, _) = prodFunc(i, Xs[i], Xp[i])
+        return if s < s_thresh
+            r0 * (Xs[i] + Xp[i])
+        else
+            rs * (Xs[i] + Xp[i])
+        end
+    end
+    return ScheduledCost(prodFunc.n, schedule, true)
 end

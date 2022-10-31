@@ -85,7 +85,7 @@ end
 constructor for problem, where defaults will be overridden by provided kwargs
     mostly just a helper, probably shouldn't be called by user
 """
-function Problem_with_defaults(
+function Problem(
     default_d,
     default_costFunc,
     default_prodFunc,
@@ -177,7 +177,7 @@ function Problem(
     n::Int = 2,
     kwargs...
 )
-    return Problem_with_defaults(
+    return Problem(
         zeros(n),
         FixedUnitCost(n, fill(0.1, n)),
         ProdFunc(),
@@ -196,7 +196,7 @@ function Problem(
     problem::Problem;
     kwargs...
 )
-    Problem_with_defaults(
+    Problem(
         problem.d,
         problem.costFunc,
         problem.prodFunc,
