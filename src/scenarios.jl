@@ -6,13 +6,15 @@ struct Scenario{T <: Problem, N} <: AbstractScenario
     n_steps2::Union{Int, Nothing}
     varying::Symbol
     varying2::Union{Symbol, Nothing}
+    varying_data::Array{Float64}
+    varying2_data::Union{Array{Float64}, Nothing}
     problems::Array{T, N}
 end
 
 function Scenario(
     ;
     n::Int = 2,
-    varying::Symbol = :r,
+    varying::Symbol,
     varying2::Union{Symbol, Nothing} = nothing,
     kwargs...
 )
@@ -23,7 +25,7 @@ function Scenario(
                     @assert size(v, 2) == n "$k must have n columns"
                     [x for x in eachrow(v)]
                 elseif v isa AbstractVector
-                    v
+                    collect(v)
                 else
                     [v]
                 end
@@ -49,6 +51,7 @@ function Scenario(
     return Scenario(
         n, n_steps, n_steps2,
         varying, varying2,
+        kwargs_[varying], isnothing(varying2) ? nothing : kwargs_[varying2],
         problems
     )
 end
@@ -99,12 +102,6 @@ function extract(scenario::Scenario, field::Symbol)
         problem = scenario.problems[i, j]
         out[i, j] = if field in (:A, :α, :B, :β, :θ)
             getfield(problem.prodFunc, field)
-        elseif field == :r && problem.costFunc isa FixedUnitCost
-            problem.costFunc.r
-        elseif field == :rs && problem.costFunc isa FixedUnitCost2
-            problem.costFunc.r[:, 1]
-        elseif field == :rp && problem.costFunc isa FixedUnitCost2
-            problem.costFunc.r[:, 2]
         else
             getfield(problem, field)
         end

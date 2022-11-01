@@ -109,7 +109,7 @@ end
 
 """
 Represents an arbitrary cost schedule
-`schedule`` should be a function that takes an Int index i and length n vectors Xs and Xp and returns a scalar cost
+`schedule` should be a function that takes an Int index i and length n vectors Xs and Xp and returns a scalar cost
 Can't infer whether is symmetric, so symmetric param must be provided
 """
 struct ScheduledCost <: CostFunc
@@ -132,9 +132,9 @@ Creates a new ScheduledCost object
 where players pay a fixed cost of r0 if their safety is less than a threshold s_thresh and rs otherwise
 """
 function create_certification_cost(
-    r0::Float64,
-    rs::Float64,
-    s_thresh::Float64,
+    r0::Number,
+    rs::Number,
+    s_thresh::Number,
     prodFunc::ProdFunc,
 )
     schedule = function(i::Int, Xs, Xp)

@@ -272,8 +272,10 @@ function create_plot(results::Array{SolverResult, 2}, xvals, xlabel, labels, log
 end
 
 function get_xvals_for_result_plot(res::ScenarioResult)
-    varying = reduce(vcat, transpose.(extract(res.scenario, res.scenario.varying)[:, 1]))
-    return if varying[:, 2] == varying[:, 1]
+    varying = res.scenario.varying_data
+    if ndims(varying) == 1
+        varying
+    elseif varying[:, 2] == varying[:, 1]
         varying[:, 1]
     else
         1:scenario.n_steps

@@ -97,21 +97,13 @@ function Problem(
     kwargs...
 )
     @assert n >= 2
+    
     d = if haskey(kwargs, :d)
         as_Float64_Array(kwargs[:d], n)
     else
         default_d
     end
-    costFunc = if haskey(kwargs, :costFunc)
-        kwargs[:costFunc]
-    elseif haskey(kwargs, :rs) && haskey(kwargs, :rp)
-        FixedUnitCost2(as_Float64_Array(kwargs[:rs], n), as_Float64_Array(kwargs[:rp], n))
-    elseif haskey(kwargs, :r)
-        FixedUnitCost(n, as_Float64_Array(kwargs[:r], n))
-    else
-        default_costFunc
-    end
-    @assert n == costFunc.n
+
     prodFunc = if haskey(kwargs, :prodFunc)
         kwargs[:prodFunc]
     else
@@ -126,16 +118,33 @@ function Problem(
         end
     end
     @assert n == prodFunc.n
+
+    costFunc = if haskey(kwargs, :costFunc)
+        kwargs[:costFunc]
+    elseif haskey(kwargs, :r0) && haskey(kwargs, :rs)
+        @assert haskey(kwargs, :s_thresh) "Got arguments r0 and rs, implying certification costs, but s_thresh was not provided."
+        create_certification_cost(kwargs[:r0], kwargs[:rs], kwargs[:s_thresh], prodFunc)
+    elseif haskey(kwargs, :rs) && haskey(kwargs, :rp)
+        FixedUnitCost2(as_Float64_Array(kwargs[:rs], n), as_Float64_Array(kwargs[:rp], n))
+    elseif haskey(kwargs, :r)
+        FixedUnitCost(n, as_Float64_Array(kwargs[:r], n))
+    else
+        default_costFunc
+    end
+    @assert n == costFunc.n
+
     riskFunc = if haskey(kwargs, :riskFunc)
         kwargs[:riskFunc]
     else
         default_riskFunc
     end
+
     csf = if haskey(kwargs, :csf)
         kwargs[:csf]
     else
         default_csf
     end
+
     payoffFunc = if haskey(kwargs, :payoffFunc)
         kwargs[:payoffFunc]
     else
