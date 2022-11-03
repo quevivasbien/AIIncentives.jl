@@ -292,11 +292,10 @@ function get_labels_for_plot(res::ScenarioResult, labels = nothing)
     elseif isnothing(res.scenario.varying2)
         ["player $i" for i in 1:res.scenario.n] |> to_rowvec
     else
-        varying2 = reduce(
-            vcat,
-            transpose.(extract(res.scenario, res.scenario.varying2)[1, :])
-        )
-        if varying2[:, 2] == varying2[:, 1]
+        varying2 = res.scenario.varying2_data
+        if ndims(varying2) == 1
+            ["$(res.scenario.varying2) = $v" for v in varying2]
+        elseif varying2[:, 2] == varying2[:, 1]
             ["$(res.scenario.varying2) = $v" for v in varying2[:, 1]]
         else
             ["$(res.scenario.varying2) = $v" for v in rows(varying2)]
