@@ -125,6 +125,14 @@ function extract(res::ScenarioResult{SolverResult, 1}, field::Symbol)
     end
 end
 
+function extract(res::ScenarioResult{Vector{SolverResult}, 1}, field::Symbol)
+    return if field in (:success, :Xs, :Xp, :s, :p, :σ, :payoffs)
+        [[getfield(x, field) for x in s] for s in res.solverResults]
+    else
+        getfield(res.scenario, field)
+    end
+end
+
 
 # SOLVER FUNCTIONS:
 

@@ -17,7 +17,7 @@ end
 
 function mean(x, dims::Tuple)
     reshape(
-        sum(x, dims = dims) ./ prod(to_indices(size(x), dims)),
+        sum(x, dims = dims) ./ prod(size(x)[collect(dims)]),
         (s for (i, s) in enumerate(size(x)) if i ∉ dims)...
     )
 end
