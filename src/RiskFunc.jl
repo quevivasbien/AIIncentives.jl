@@ -104,7 +104,7 @@ Defines proba(safe) as probability that the winner is safe
 struct WinnerOnlyRisk <: RiskFunc end
 
 function σ(
-    rf::WinnerOnlyRisk,
+    ::WinnerOnlyRisk,
     i::Int,
     s::AbstractVector{T}
 ) where {T <: Real}
@@ -112,7 +112,7 @@ function σ(
 end
 
 function σ(
-    rf::WinnerOnlyRisk,
+    ::WinnerOnlyRisk,
     s::AbstractVector{T}
 ) where {T <: Real}
     return get_probas(s)

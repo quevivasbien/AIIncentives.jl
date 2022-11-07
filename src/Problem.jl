@@ -121,9 +121,13 @@ function Problem(
 
     costFunc = if haskey(kwargs, :costFunc)
         kwargs[:costFunc]
-    elseif haskey(kwargs, :r0) && haskey(kwargs, :rs)
-        @assert haskey(kwargs, :s_thresh) "Got arguments r0 and rs, implying certification costs, but s_thresh was not provided."
-        create_certification_cost(kwargs[:r0], kwargs[:rs], kwargs[:s_thresh], prodFunc)
+    elseif haskey(kwargs, :r0) && haskey(kwargs, :r1)
+        @assert haskey(kwargs, :s_thresh) "Found r0 and r1, implying CertificationCost, but s_thresh was not provided"
+        if typeof(kwargs[:r0]) <: Number
+            CertificationCost(n, kwargs[:r0], kwargs[:r1], kwargs[:s_thresh], prodFunc)
+        else  # assume r0 and r1 are vectors
+            CertificationCost(kwargs[:r0], kwargs[:r1], kwargs[:s_thresh], prodFunc)
+        end
     elseif haskey(kwargs, :rs) && haskey(kwargs, :rp)
         FixedUnitCost2(as_Float64_Array(kwargs[:rs], n), as_Float64_Array(kwargs[:rp], n))
     elseif haskey(kwargs, :r)
@@ -167,6 +171,7 @@ if not provided, defaults to 0
 
 to specify the costFunc to use, provide one of the following:
 - `costFunc`, which isa pre-constructed `CostFunc`
+- `r0`, `r1`, and `s_thresh` as scalars or vectors of length `n` (all need to be either scalars or vectors, cannot currently mix); this will be interpreted as `CertificationCost([n,] r0, r1, s_thresh)`
 - `rs` and `rp` as scalars or vectors of length `n`; this will be interpreted as `FixedUnitCost2(rs, rp)`
 - `r` as a scalar or vector of length `n`; this will be interpreted as `FixedUnitCost([n,] r)`
 If you provide more than one of the above, the first one in the list above will be used.

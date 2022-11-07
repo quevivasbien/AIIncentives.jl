@@ -16,7 +16,7 @@ Base.@kwdef struct SolverOptions{T <: AbstractFloat}
 end
 
 function SolverOptions(options::SolverOptions; kwargs...)
-    fields = ((f in kwargs.itr) ? kwargs[f] : getfield(options, f) for f in fieldnames(SolverOptions))
+    fields = ((f in keys(kwargs)) ? kwargs[f] : getfield(options, f) for f in fieldnames(SolverOptions))
     return SolverOptions(fields...)
 end
 

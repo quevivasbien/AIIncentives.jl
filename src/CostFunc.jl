@@ -1,6 +1,6 @@
 """
 Determines cost of inputs
-Subtypes should implement `cost` and `is_symmetric` and have an Int field `n`
+Subtypes should implement `cost` and `is_symmetric` and have an field `n` of type Int
 """
 abstract type CostFunc end
 
@@ -12,6 +12,7 @@ function (c::CostFunc)(Xs::AbstractVector, Xp::AbstractVector)
     return cost(c, Xs, Xp)
 end
 
+# default impl if not implemented manually
 function cost(c::CostFunc, Xs, Xp)
     return cost.(Ref(c), 1:c.n, Ref(Xs), Ref(Xp))
 end
@@ -108,42 +109,61 @@ end
 
 
 """
-Represents an arbitrary cost schedule
-`schedule` should be a function that takes an Int index i and length n vectors Xs and Xp and returns a scalar cost
-Can't infer whether is symmetric, so symmetric param must be provided
+A cost schedule where players pay a fixed unit cost r0 if their safety is less than a threshold `s_thresh` and a fixed unit cost r1 otherwise
 """
-struct ScheduledCost <: CostFunc
+struct CertificationCost{T <: Real} <: CostFunc
     n::Int
-    schedule::Function
-    symmetric::Bool
+    r0::Vector{T}
+    r1::Vector{T}
+    s_thresh::Vector{T}
+    prodFunc::ProdFunc{T}
 end
-
-function cost(c::ScheduledCost, i::Int, Xs, Xp)
-    return c.schedule(i, Xs, Xp)
-end
-
-function is_symmetric(c::ScheduledCost)
-    return c.symmetric
-end
-
 
 """
-Creates a new ScheduledCost object
-where players pay a fixed cost of r0 if their safety is less than a threshold s_thresh and rs otherwise
+construct CertificationCost with same r0 and r1 for all players
 """
-function create_certification_cost(
-    r0::Number,
-    rs::Number,
-    s_thresh::Number,
-    prodFunc::ProdFunc,
+function CertificationCost(
+    n::Int,
+    r0::Real,
+    r1::Real,
+    s_thresh::Real,
+    prodFunc::ProdFunc{Float64},
 )
-    schedule = function(i::Int, Xs, Xp)
-        (s, _) = prodFunc(i, Xs[i], Xp[i])
-        return if s < s_thresh
-            r0 * (Xs[i] + Xp[i])
-        else
-            rs * (Xs[i] + Xp[i])
-        end
-    end
-    return ScheduledCost(prodFunc.n, schedule, true)
+    return CertificationCost(
+        n,
+        as_Float64_Array(r0, n),
+        as_Float64_Array(r1, n),
+        as_Float64_Array(s_thresh, n),
+        prodFunc
+    )
+end
+
+"""
+construct CertificationCost with different r0 and r1 for players
+"""
+function CertificationCost(
+    r0::AbstractVector,
+    r1::AbstractVector,
+    s_thresh::AbstractVector,
+    prodFunc::ProdFunc{Float64},
+)
+    n = length(r0)
+    @assert n == length(r1) == length(s_thresh) "r0, r1, and s_thresh must have same length"
+    return CertificationCost(
+        n,
+        convert(Vector{Float64}, r0),
+        convert(Vector{Float64}, r1),
+        convert(Vector{Float64}, s_thresh),
+        prodFunc
+    )
+end
+
+function cost(c::CertificationCost, i::Int, Xs, Xp)
+    (s, _) = c.prodFunc(i, Xs[i], Xp[i])
+    r = s < c.s_thresh[i] ? c.r0[i] : c.r1[i]
+    return r * (Xs[i] + Xp[i])
+end
+
+function is_symmetric(c::CertificationCost)
+    return all(c.r0[1] .== c.r0[2:end]) && all(c.r1[1] .== c.r1[2:end])
 end
