@@ -114,7 +114,7 @@ function Problem(
         if isempty(prodFunc_kwargs)
             default_prodFunc
         else
-            ProdFunc(n = n; prodFunc_kwargs...)
+            ProdFunc(default_prodFunc; prodFunc_kwargs...)
         end
     end
     @assert n == prodFunc.n

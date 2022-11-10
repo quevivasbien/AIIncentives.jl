@@ -6,8 +6,8 @@ struct Scenario{T <: Problem, N} <: AbstractScenario
     n_steps2::Union{Int, Nothing}
     varying::Symbol
     varying2::Union{Symbol, Nothing}
-    varying_data::Array{Float64}
-    varying2_data::Union{Array{Float64}, Nothing}
+    varying_data::Array
+    varying2_data::Union{Array, Nothing}
     problems::Array{T, N}
 end
 

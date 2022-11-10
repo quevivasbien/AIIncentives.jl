@@ -96,6 +96,17 @@ end
 
 ProdFunc(A, α, B, β, θ) = ProdFunc(n=length(A), A=A, α=α, B=B, β=β, θ=θ)
 
+"""
+Create a ProdFunc from a pre-existing prodFunc
+"""
+function ProdFunc(prodFunc::ProdFunc; kwargs...)
+    fields = (
+        f => (f in keys(kwargs)) ? kwargs[f] : getfield(prodFunc, f)
+        for f in fieldnames(ProdFunc)
+    )
+    return ProdFunc(; fields...)
+end
+
 
 function f(prodFunc::ProdFunc, i::Int, Xs::Number, Xp::Number)
     p = prodFunc.B[i] * Xp^prodFunc.β[i]
