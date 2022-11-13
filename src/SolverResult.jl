@@ -30,7 +30,7 @@ end
 
 function SolverResult(problem::AbstractProblem, success::Bool, Xs::Vector{T}, Xp::Vector{T}; fill = true) where {T <: Real}
     return if fill
-        SolverResult(success, Xs, Xp, get_s_p_σ_payoffs(problem, Xs, Xp)...)
+        SolverResult(success, Xs, Xp, s_p_σ_payoffs(problem, Xs, Xp)...)
     else
         SolverResult(success, Xs, Xp, similar(Xs), similar(Xs), undef, similar(Xs))
     end

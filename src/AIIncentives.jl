@@ -5,22 +5,29 @@ export
     
     ProdFunc,
 
+    RiskFunc,
     MultiplicativeRisk,
     AdditiveRisk,
     WinnerOnlyRisk,
 
+    PayoffFunc,
     LinearPayoff,
     PayoffOnDisaster,
 
+    CostFunc,
     FixedUnitCost,
     FixedUnitCost2,
+    LinearCost,
+    CertificationCost,
 
+    AbstractProblem,
     Problem,
     ProblemWithBeliefs,
 
     SolverOptions,
     SolverResult,
 
+    AbstractScenario,
     Scenario,
     ScenarioResult,
     ScenarioWithBeliefs,
@@ -36,9 +43,7 @@ export
 
     f,
     payoff,
-    payoffs,
-    reward,
-    all_rewards
+    payoffs
 
 
 include("includes.jl")

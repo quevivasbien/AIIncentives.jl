@@ -1,20 +1,20 @@
 """
 Abstract type to allow insertion of alternate problem types
 
-Subtypes should implement `get_payoff`, `payoffs_with_s_p`, `get_payoffs`, `get_s_p_σ_payoffs`, `is_symmetric` and have an integer field `n`
+Subtypes should implement `payoff`, `payoffs_with_s_p`, `payoffs`, `s_p_σ_payoffs`, `is_symmetric` and have an integer field `n`
 """
 abstract type AbstractProblem end
 
 
-(problem::AbstractProblem)(i::Int, Xs::Vector, Xp::Vector) = get_payoff(problem, i, Xs, Xp)
+(problem::AbstractProblem)(i::Int, Xs::Vector, Xp::Vector) = payoff(problem, i, Xs, Xp)
 
-(problem::AbstractProblem)(Xs::Vector, Xp::Vector) = get_payoffs(problem, Xs, Xp)
+(problem::AbstractProblem)(Xs::Vector, Xp::Vector) = payoffs(problem, Xs, Xp)
 
 function get_func(problem::AbstractProblem, i::Int, strats::Array)
     strats_ = copy(strats)
     function func(x)
         strats_[i, :] = x
-        return -get_payoff(problem, i, strats_[:, 1], strats_[:, 2])
+        return -payoff(problem, i, strats_[:, 1], strats_[:, 2])
     end
 end
 
@@ -41,20 +41,20 @@ Instead of providing `r`, you can provide a `CostFunc` with the keyword `costFun
 
 To calculate the payoffs for all the players, you can do
 ```julia
-payoffs = get_payoffs(problem, Xs, Xp)
+payoffs(problem, Xs, Xp)
 ```
 or
 ```julia
-payoffs = problem(Xs, Xp)
+problem(Xs, Xp)
 ```
 
 and for just player `i`,
 ```julia
-payoff_i = get_payoff(problem, i, Xs, Xp)
+payoff(problem, i, Xs, Xp)
 ```
 or
 ```julia
-payoff_i = problem(i, Xs, Xp)
+problem(i, Xs, Xp)
 ```
 
 (Note that in the above, `Xs` and `Xp` are vectors of length `problem.n`.)
@@ -67,18 +67,6 @@ struct Problem{T <: Real, R <: RiskFunc, C <: CSF, P <: PayoffFunc, K <: CostFun
     csf::C
     payoffFunc::P
     costFunc::K
-end
-
-function Problem(
-    n::Int,
-    d::Vector{T},
-    r::Vector{T},
-    prodFunc::ProdFunc{T},
-    riskFunc::R,
-    csf::C,
-    payoffFunc::P,
-) where {T <: Real, R <: RiskFunc, C <: CSF, P <: PayoffFunc}
-    return Problem(n, d, prodFunc, riskFunc, csf, payoffFunc, FixedUnitCost(n, r))
 end
 
 """
@@ -222,17 +210,17 @@ function Problem(
     )
 end
 
-function get_payoff(problem::Problem, i::Int, Xs::Vector, Xp::Vector)
+function payoff(problem::Problem, i::Int, Xs::Vector, Xp::Vector)
     (s, p) = problem.prodFunc(Xs, Xp)
     proba_win = problem.csf(p)  # probability that each player wins
     (pf_win, pf_lose) = problem.payoffFunc(i, p[i])  # payoffs if player i wins/loses
-    payoffs = [(j == i) ? pf_win : pf_lose for j in 1:problem.n]
+    payoffs_ = [(j == i) ? pf_win : pf_lose for j in 1:problem.n]
     σis = problem.riskFunc(s)  # vector of proba(safe) conditional on each player winning
     cond_σ = proba_win .* σis
     if problem.payoffFunc isa PayoffOnDisaster && problem.payoffFunc.whogets[i]
-        return sum(payoffs .* cond_σ) + sum((payoffs .- problem.d[i]) .* proba_win .* (1 .- σis)) - problem.costFunc(i, Xs, Xp)
+        return sum(payoffs_ .* cond_σ) + sum((payoffs_ .- problem.d[i]) .* proba_win .* (1 .- σis)) - problem.costFunc(i, Xs, Xp)
     else
-        return sum(payoffs .* cond_σ) - (1 - sum(cond_σ)) * problem.d[i] - problem.costFunc(i, Xs, Xp)
+        return sum(payoffs_ .* cond_σ) - (1 - sum(cond_σ)) * problem.d[i] - problem.costFunc(i, Xs, Xp)
     end
 end
 
@@ -240,34 +228,34 @@ function payoffs_with_s_p(problem::Problem, Xs::Vector, Xp::Vector, s::Vector, p
     proba_win = problem.csf(p)  # probability that each player wins
     # construct matrix of payoffs
     (pf_win, pf_lose) = problem.payoffFunc(p)  # payoffs if each player wins/loses
-    payoffs = repeat(pf_lose, 1, problem.n)
-    payoffs[diagind(payoffs)] = pf_win
+    payoffs_ = repeat(pf_lose, 1, problem.n)
+    payoffs_[diagind(payoffs_)] = pf_win
     σis = problem.riskFunc(s)  # vector of proba(safe) conditional on each player winning
     cond_σ = proba_win .* σis  # proba that i wins and outcome is safe
     if problem.payoffFunc isa PayoffOnDisaster
-        safe_payoffs = vec(sum(payoffs .* cond_σ, dims = 2))
+        safe_payoffs = vec(sum(payoffs_ .* cond_σ, dims = 2))
         cond_d = proba_win .* (1 .- σis)  # proba that i wins and outcome is not safe
         disaster_payoffs = vec(
-            sum((payoffs .* problem.payoffFunc.whogets .- problem.d) .* cond_d,
+            sum((payoffs_ .* problem.payoffFunc.whogets .- problem.d) .* cond_d,
             dims = 2
         ))
         return safe_payoffs .+ disaster_payoffs .- problem.costFunc(Xs, Xp)
     else
-        return vec(sum(payoffs .* cond_σ, dims = 2)) .- (1 .- sum(cond_σ)) .* problem.d .- problem.costFunc(Xs, Xp)
+        return vec(sum(payoffs_ .* cond_σ, dims = 2)) .- (1 .- sum(cond_σ)) .* problem.d .- problem.costFunc(Xs, Xp)
     end
 end
 
-function get_payoffs(problem::Problem, Xs::Vector, Xp::Vector)
+function payoffs(problem::Problem, Xs::Vector, Xp::Vector)
     (s, p) = problem.prodFunc(Xs, Xp)
     return payoffs_with_s_p(problem, Xs, Xp, s, p)
 end
 
-function get_s_p_σ_payoffs(problem::Problem, Xs_, Xp_)
+function s_p_σ_payoffs(problem::Problem, Xs_, Xp_)
     (s, p) = f(problem.prodFunc, Xs_, Xp_)
     # proba(safe) = sum(proba(i safe) * proba(i win))
     σ = sum(problem.riskFunc(s) .* problem.csf(p))
-    payoffs = payoffs_with_s_p(problem, Xs_, Xp_, s, p)
-    return s, p, σ, payoffs
+    payoffs_ = payoffs_with_s_p(problem, Xs_, Xp_, s, p)
+    return s, p, σ, payoffs_
 end
 
 function is_symmetric(problem::Problem)
@@ -313,10 +301,10 @@ macro to_baseProblem(f)
     end
 end
 
-@to_baseProblem get_payoff
-@to_baseProblem get_payoffs
+@to_baseProblem payoff
+@to_baseProblem payoffs
 @to_baseProblem payoffs_with_s_p
-@to_baseProblem get_s_p_σ_payoffs
+@to_baseProblem s_p_σ_payoffs
 
 is_symmetric(problem::ProblemWithBeliefs) = (
     is_symmetric(problem.baseProblem)

@@ -281,20 +281,20 @@ This gives you some help on how to create a new `Problem`.]
 
 To calculate the payoffs for all the players, you can do
 ```julia
-payoffs = get_payoffs(problem, Xs, Xp)
+payoffs(problem, Xs, Xp)
 ```
 or
 ```julia
-payoffs = problem(Xs, Xp)
+problem(Xs, Xp)
 ```
 
 and for just player `i`,
 ```julia
-payoff_i = get_payoff(problem, i, Xs, Xp)
+payoff(problem, i, Xs, Xp)
 ```
 or
 ```julia
-payoff_i = problem(i, Xs, Xp)
+problem(i, Xs, Xp)
 ```
 
 (Note that in the above, `Xs` and `Xp` are vectors of length `problem.n`.)

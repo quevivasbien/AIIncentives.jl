@@ -45,7 +45,7 @@ end
 # Check some points around the given strat
 # returns true if strat satisfies optimality (in nash eq. sense) at those points
 # won't always catch wrong solutions, but does a decent job
-function verify_i(problem, i, Xs, Xp, payoffs, options)
+function verify_i(problem, i, Xs, Xp, payoffs_, options)
     higher_Xs = setindex!(
         copy(Xs),
         (Xs[i] == 0) ? EPSILON : options.verify_mult * Xs[i],
@@ -59,10 +59,10 @@ function verify_i(problem, i, Xs, Xp, payoffs, options)
     lower_Xs = setindex!(copy(Xs), Xs[i] * options.verify_mult, i)
     lower_Xp = setindex!(copy(Xp), Xp[i] * options.verify_mult, i)
 
-    payoff_higher_Xs = get_payoff(problem, i, higher_Xs, Xp)
-    payoff_higher_Xp = get_payoff(problem, i, Xs, higher_Xp)
-    payoff_lower_Xs = get_payoff(problem, i, lower_Xs, Xp)
-    payoff_lower_Xp = get_payoff(problem, i, Xs, lower_Xp)
+    payoff_higher_Xs = payoff(problem, i, higher_Xs, Xp)
+    payoff_higher_Xp = payoff(problem, i, Xs, higher_Xp)
+    payoff_lower_Xs = payoff(problem, i, lower_Xs, Xp)
+    payoff_lower_Xp = payoff(problem, i, Xs, lower_Xp)
     
     mirror_Xs = setindex!(
         copy(Xs),
@@ -74,7 +74,7 @@ function verify_i(problem, i, Xs, Xp, payoffs, options)
         (sum(Xp) - Xp[i]) / (length(Xp) - 1),
         i
     )
-    payoff_mirror = get_payoff(problem, i, mirror_Xs, mirror_Xp)
+    payoff_mirror = payoff(problem, i, mirror_Xs, mirror_Xp)
     if any(is_napprox_greater.(
         (
             payoff_higher_Xs,
@@ -83,12 +83,12 @@ function verify_i(problem, i, Xs, Xp, payoffs, options)
             payoff_lower_Xp,
             payoff_mirror
         ),
-        payoffs[i],
+        payoffs_[i],
         rtol = sqrt(options.tol)
     ))
         if options.verbose
             println("Solution failed verification!")
-            println("| Xs = $Xs, Xp = $Xp: $(payoffs[i])")
+            println("| Xs = $Xs, Xp = $Xp: $(payoffs_[i])")
             println("| Xs[$i] = $(higher_Xs[i]): $payoff_higher_Xs")
             println("| Xp[$i] = $(higher_Xp[i]): $payoff_higher_Xp")
             println("| Xs[$i] = $(lower_Xs[i]): $payoff_lower_Xs")
@@ -108,9 +108,9 @@ function verify(problem, strat, options)
 
     Xs = strat[:, 1]
     Xp = strat[:, 2]
-    payoffs = get_payoffs(problem, Xs, Xp)
+    payoffs_ = payoffs(problem, Xs, Xp)
     for i in 1:problem.n
-        if !verify_i(problem, i, Xs, Xp, payoffs, options)
+        if !verify_i(problem, i, Xs, Xp, payoffs_, options)
             return false
         end
     end
@@ -124,9 +124,9 @@ function verify(problem::ProblemWithBeliefs, strat, options)
 
     Xs = strat[:, 1]
     Xp = strat[:, 2]
-    payoffs = [get_payoff(problem.beliefs[i], i, Xs, Xp) for i in 1:problem.n]
+    payoffs_ = [payoff(problem.beliefs[i], i, Xs, Xp) for i in 1:problem.n]
     for i in 1:problem.n
-        if !verify_i(problem.beliefs[i], i, Xs, Xp, payoffs, options)
+        if !verify_i(problem.beliefs[i], i, Xs, Xp, payoffs_, options)
             return false
         end
     end
