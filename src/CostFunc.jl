@@ -17,8 +17,8 @@ function cost(c::CostFunc, Xs, Xp)
     return cost.(Ref(c), 1:c.n, Ref(Xs), Ref(Xp))
 end
 
-struct FixedUnitCost{T <: Real} <: CostFunc
-    n::Int
+mutable struct FixedUnitCost{T <: Real} <: CostFunc
+    const n::Int
     r::Vector{T}
 end
 
@@ -47,8 +47,8 @@ end
 """
 Like FixedUnitCost but with different prices for Xs and Xp
 """
-struct FixedUnitCost2{T <: Real} <: CostFunc
-    n::Int
+mutable struct FixedUnitCost2{T <: Real} <: CostFunc
+    const n::Int
     r::Matrix{T}
 end
 
@@ -80,8 +80,8 @@ Costs change linearly in Xs, Xp
 Marginal cost of (Xs, Xp) is r0[1] + r1[1] * Xs + r0[2] + r1[2] * Xp
 => Total cost is r0[1] * Xs + r1[1] * Xs^2 / 2 + r0[2] * Xp + r1[2] * Xp^2 / 2
 """
-struct LinearCost{T <: Real} <: CostFunc
-    n::Int
+mutable struct LinearCost{T <: Real} <: CostFunc
+    const n::Int
     r0::Matrix{T}
     r1::Matrix{T}
 end
@@ -111,8 +111,8 @@ end
 """
 A cost schedule where players pay a fixed unit cost r0 if their safety is less than a threshold `s_thresh` and a fixed unit cost r1 otherwise
 """
-struct CertificationCost{T <: Real} <: CostFunc
-    n::Int
+mutable struct CertificationCost{T <: Real} <: CostFunc
+    const n::Int
     r0::Vector{T}
     r1::Vector{T}
     s_thresh::Vector{T}
