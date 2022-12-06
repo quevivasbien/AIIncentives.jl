@@ -48,7 +48,6 @@ function create_plot(results::Vector{SolverResult}, xvals, xlabel, labels, logsc
         total_safety_plt, payoff_plt,
         layout = (3, 2), size = (900, 900), legend_font_pointsize = 6,
         legend_background_color = RGBA(1., 1., 1., 0.5),
-        left_margin = 20px
     )
     return final_plot
 end
@@ -119,7 +118,6 @@ function create_scatterplot(
         layout = (3, 2), size = (900, 900), legend_font_pointsize = 6,
         legend_background_color = RGBA(1., 1., 1., 0.5),
         markeralpha = 0.25, markerstrokealpha = 0.,
-        left_margin = 20px
     )
     return final_plot
 end
@@ -266,20 +264,22 @@ function create_plot(results::Array{SolverResult, 2}, xvals, xlabel, labels, log
         Xp_plt, Xs_plt, perf_plt, safety_plt, total_safety_plt, payoff_plt,
         layout = (3, 2), size = (900, 900), legend_font_pointsize = 6,
         legend_background_color = RGBA(1., 1., 1., 0.5),
-        left_margin = 20px
     )
     return final_plot
 end
 
 function get_xvals_for_result_plot(res::ScenarioResult)
     varying = res.scenario.varying_data
-    if ndims(varying) == 1
-        varying
-    elseif varying[:, 2] == varying[:, 1]
-        varying[:, 1]
-    else
-        1:scenario.n_steps
+    if ndims(varying) == 1 && varying[1] isa Number
+        return varying
+    elseif ndims(varying) == 2 && varying[:, 2] == varying[:, 1]
+        return varying[:, 1]
     end
+    println(
+        "Warning: varying param is not a single value for all players, ",
+        "using 1:n_steps as xvals -- specify xvals manually to change this"
+    )
+    1:scenario.n_steps
 end
 
 function get_labels_for_plot(res::ScenarioResult, labels = nothing)

@@ -1,7 +1,7 @@
 # import dependencies and load module components
 
 using Optim
-using Plots, Plots.PlotMeasures
+using Plots
 using Plots: RecipesBase.plot
 
 using LinearAlgebra: diagind
