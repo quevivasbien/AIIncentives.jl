@@ -1,11 +1,25 @@
 const EPSILON = 1e-8  # small number to help numerical stability in some places
 
+# Options provided to the `solve` function
+# tol: tolerance for convergence; we stop iterating when all differences in payoffs between iters are less than this value
+# max_iters: maximum number of iterations to run; exits with failed status if this is reached
+# iter_algo: Optim solver to use for each player's iterated optimization
+# iter_options: Optim.Options provided to Optim solver
+# init_guess: initial guess for the solution; if nothing, init points are drawn from LogNormal(init_mu, init_sigma)
+# n_points: number of points to use with scatter and mixed methods
+# init_mu: mean of initial guess distribution
+# init_sigma: standard deviation of initial guess distribution
+# verbose: whether to print extra information
+# verify: whether to try to check solution after finding it
+# verify_mult: multiplier to use when checking solution, represents area around suggested solution in which to look for a better solution
+# retries: maximum number of times to retry if solution fails verification
+# callback: function to call after each iteration; takes in the current strategy
 Base.@kwdef struct SolverOptions{T <: AbstractFloat}
     tol::T = 1e-6
     max_iters::Int = 100
     iter_algo::Optim.AbstractOptimizer = NelderMead()
     iter_options::Optim.Options = Optim.Options(x_tol = 1e-8, iterations = 500)
-    init_guess::Union{T, Nothing} = nothing  # if nothing, then intialize randomly
+    init_guess::Union{T, Nothing} = nothing
     n_points::Int = 4
     init_mu::T = -1.
     init_sigma::T = 0.1
@@ -13,6 +27,7 @@ Base.@kwdef struct SolverOptions{T <: AbstractFloat}
     verify::Bool = true
     verify_mult::T = 1.1
     retries::Int = 10
+    callback::Union{Function, Nothing} = nothing
 end
 
 function SolverOptions(options::SolverOptions; kwargs...)
@@ -133,7 +148,7 @@ function verify(problem::ProblemWithBeliefs, strat, options)
     return true
 end
 
-# ITERATING METHOD `solve_iters`
+## iterating method `solve_iters`
 
 function single_iter_for_i(
     problem, strat, i, init_guess,
@@ -160,6 +175,7 @@ function single_iter_for_i(
     end
 end
 
+# calculates optimal strategy for all players given other players' optima from last iteration
 function solve_single_iter(
     problem::Problem, strat::Array,
     options = SolverOptions()
@@ -171,10 +187,18 @@ function solve_single_iter(
     return new_strats
 end
 
+# helper for solver_iters
+# runs iteration and checks if was successful
 function suggest_iter_strat(problem, init_guess, options)
     strat = init_guess
+    if !isnothing(options.callback)
+        options.callback(strat)
+    end
     for i in 1:options.max_iters
         new_strat = solve_single_iter(problem, strat, options)
+        if !isnothing(options.callback)
+            options.callback(new_strat)
+        end
         if all(isapprox.(
             log.(new_strat), log.(strat),
             atol = EPSILON, rtol = options.tol
@@ -212,7 +236,7 @@ function solve_iters(
     end
 end
 
-# SCATTER ITERATING METHOD:
+## "scatter" iterating method:
 # Runs iter_solve from multiple init points and compares results
 
 function solve_scatter(
@@ -238,7 +262,7 @@ function solve_scatter(
 end
 
 
-# Solver for mixed strategy equilibria
+## Solver for mixed strategy equilibria
 # Runs iterating solver over history of run
 
 function single_mixed_iter_for_i(problem, history, i, init_guess, options = SolverOptions())
@@ -282,35 +306,46 @@ function single_mixed_iter(problem, history, init_guess, options = SolverOptions
     return new_strat
 end
 
+function results_from_history(problem, history, options)
+    [
+        SolverResult(problem, true, history[:, 1, t], history[:, 2, t])
+        for t in 1:options.n_points
+    ]
+end
+
 function solve_mixed(
     problem::Problem,
     options = SolverOptions()
 )
     # draw init points from log-normal distribution
     history = exp.(options.init_mu .+ options.init_sigma .* randn(problem.n, 2, options.n_points))
+    if !isnothing(options.callback)
+        options.callback(history)
+    end
     for i in 1:options.max_iters
-        last_history = copy(history)
+        new_history = similar(history)
         for t in 1:options.n_points
             # on each iter, solve to maximize average payoff given current history
             # replace one of the history entries with new optimum
-            history[:, :, t] = single_mixed_iter(problem, history, history[:, :, t], options)
+            new_history[:, :, t] = single_mixed_iter(problem, history, history[:, :, t], options)
+        end
+        if !isnothing(options.callback)
+            options.callback(new_history)
         end
         # todo: this might never trigger when strategy is mixed, since it compares the entire history, which fluctuates
+        # could try comparing some statistics about the distribution instead
         if all(isapprox.(
-            log.(history), log.(last_history),
+            log.(new_history), log.(history),
             atol = EPSILON, rtol = options.tol
         ))
             if options.verbose
                 println("Exited on iteration $i")
             end
-            break
+            return results_from_history(problem, new_history, options)
         end
+        history = new_history
     end
-    results = [
-        SolverResult(problem, true, history[:, 1, i], history[:, 2, i])
-        for i in 1:options.n_points
-    ]
-    return results
+    return results_from_history(problem, history, options)
 end
 
 
@@ -401,4 +436,26 @@ end
 function solve(problem::ProblemWithBeliefs, method::Symbol, options)
     @assert method == :iters "Currently only :iters is supported when solving ProblemWithBeliefs"
     solve_iters(problem, options)
+end
+
+
+# util for returning a trace of solver progress, to help diagnose convergence issues
+function solve_trace(problem::Problem; method = :iters, kwargs...)
+    if method == :mixed
+        return solve_trace_mixed_(problem; kwargs...)
+    elseif method != :iters
+        throw(ArgumentError("Currently only :iters and :mixed are supported"))
+    end
+    trace = Array{Float64, 2}[]
+    solve(problem, callback = (x) -> push!(trace, deepcopy(x)); method, kwargs...)
+    # convert into a 3d array
+    # why oh why does julia not have a simple `stack` function?
+    return permutedims(reshape(reduce(hcat, trace), problem.n, 2, :), [3, 1, 2])
+end
+
+function solve_trace_mixed_(problem; kwargs...)
+    trace = Array{Float64, 3}[]
+    options = SolverOptions(SolverOptions(), callback = (x) -> push!(trace, deepcopy(x)); kwargs...)
+    solve_mixed(problem, options)
+    return permutedims(reshape(reduce(hcat, trace), problem.n, 2, options.n_points, :), [4, 3, 1, 2])
 end

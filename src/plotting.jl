@@ -543,3 +543,26 @@ end
 function plot_payoffs_near_solution(result::ScenarioResult, index::Int)
     plot_payoffs_near_solution(result.scenario.problems[index], result.solverResults[index])
 end
+
+# visualize a trace (generated from `solve_trace`)
+# trace expected to have shape t x n x 2
+function plot_trace(trace::Array{Float64, 3})
+    labels = ["player $i" for i in 1:size(trace, 2)] |> to_rowvec
+    # plot trace of Xₛ
+    xs_plot = plot(trace[:, :, 1], labels = labels, xlabel = "iteration", ylabel = "Xₛ")
+    # plot trace of Xₚ
+    xp_plot = plot(trace[:, :, 2], labels = labels, xlabel = "iteration", ylabel = "Xₚ")
+    plot(xs_plot, xp_plot, layout = (2, 1))
+end
+
+# for mixed solution, trace expected to have shape t x n_points x n x 2
+function plot_trace(trace::Array{Float64, 4}; palette = :viridis)
+    labels = ["player $i" for i in 1:size(trace, 3)] |> to_rowvec
+    xs_plot = scatter(legend = false, xlabel = "iteration", ylabel = "Xₛ", palette = Plots.palette(palette, size(trace, 3)))
+    xp_plot = scatter(legend = false, xlabel = "iteration", ylabel = "Xₚ", palette = Plots.palette(palette, size(trace, 3)))
+    for t in axes(trace, 2)
+        scatter!(xs_plot, trace[:, t, :, 1], alpha = 0.2)
+        scatter!(xp_plot, trace[:, t, :, 2], alpha = 0.2)
+    end
+    plot(xs_plot, xp_plot, layout = (2, 1))
+end
