@@ -116,7 +116,7 @@ mutable struct CertificationCost{T <: Real} <: CostFunc
     r0::Vector{T}
     r1::Vector{T}
     s_thresh::Vector{T}
-    prodFunc::ProdFunc{T}
+    const prodFunc::ProdFunc{T}
 end
 
 """

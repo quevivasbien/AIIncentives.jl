@@ -116,8 +116,15 @@ struct ScenarioResult{T <: Union{SolverResult, Vector{SolverResult}}, N}
     solverResults::Array{T, N}
 end
 
+# a result with no secondary variation and only one result per problem
+const ScenarioResult1D = ScenarioResult{SolverResult, 1}
+# a result with multiple results per problem (e.g. mixed solution)
+const ScenarioResult2D = ScenarioResult{Vector{SolverResult}, 1}
+# a result with secondary variation (and only one result per problem)
+const ScenarioResultWVar2 = ScenarioResult{SolverResult, 2}
 
-function extract(res::ScenarioResult{SolverResult, 1}, field::Symbol)
+
+function extract(res::ScenarioResult1D, field::Symbol)
     return if field in (:success, :Xs, :Xp, :s, :p, :σ, :payoffs)
         [getfield(x, field) for x in res.solverResults]
     else
@@ -125,7 +132,7 @@ function extract(res::ScenarioResult{SolverResult, 1}, field::Symbol)
     end
 end
 
-function extract(res::ScenarioResult{Vector{SolverResult}, 1}, field::Symbol)
+function extract(res::ScenarioResult2D, field::Symbol)
     return if field in (:success, :Xs, :Xp, :s, :p, :σ, :payoffs)
         [[getfield(x, field) for x in s] for s in res.solverResults]
     else

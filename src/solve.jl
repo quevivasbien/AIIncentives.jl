@@ -18,7 +18,7 @@ Base.@kwdef struct SolverOptions{T <: AbstractFloat}
     tol::T = 1e-6
     max_iters::Int = 100
     iter_algo::Optim.AbstractOptimizer = NelderMead()
-    iter_options::Optim.Options = Optim.Options(x_tol = 1e-8, iterations = 500)
+    iter_options::Optim.Options = Optim.Options(x_reltol = 1e-8, f_reltol = 1e-8, iterations = 500)
     init_guess::Union{T, Nothing} = nothing
     n_points::Int = 4
     init_mu::T = -1.
@@ -199,8 +199,10 @@ function suggest_iter_strat(problem, init_guess, options)
         if !isnothing(options.callback)
             options.callback(new_strat)
         end
+        # if payoffs in consecutive iters are within tol, exit
         if all(isapprox.(
-            log.(new_strat), log.(strat),
+            payoffs(problem, new_strat[:, 1], new_strat[:, 2]),
+            payoffs(problem, strat[:, 1], strat[:, 2]),
             atol = EPSILON, rtol = options.tol
         ))
             if options.verbose
@@ -313,6 +315,15 @@ function results_from_history(problem, history, options)
     ]
 end
 
+# computes expected payoffs for each player given the distibution of strategies `history`
+# used in `solve_mixed` to determine when convergence has been reached
+function expected_payoffs(problem, history)
+    sum(
+        payoffs(problem, history[:, 1, t], history[:, 2, t])
+        for t in axes(history, 3)
+    ) ./ size(history, 3)
+end
+
 function solve_mixed(
     problem::Problem,
     options = SolverOptions()
@@ -335,7 +346,7 @@ function solve_mixed(
         # todo: this might never trigger when strategy is mixed, since it compares the entire history, which fluctuates
         # could try comparing some statistics about the distribution instead
         if all(isapprox.(
-            log.(new_history), log.(history),
+            expected_payoffs(problem, new_history), expected_payoffs(problem, history),
             atol = EPSILON, rtol = options.tol
         ))
             if options.verbose
@@ -449,13 +460,12 @@ function solve_trace(problem::Problem; method = :iters, kwargs...)
     trace = Array{Float64, 2}[]
     solve(problem, callback = (x) -> push!(trace, deepcopy(x)); method, kwargs...)
     # convert into a 3d array
-    # why oh why does julia not have a simple `stack` function?
-    return permutedims(reshape(reduce(hcat, trace), problem.n, 2, :), [3, 1, 2])
+    return stack(trace...)
 end
 
 function solve_trace_mixed_(problem; kwargs...)
     trace = Array{Float64, 3}[]
     options = SolverOptions(SolverOptions(), callback = (x) -> push!(trace, deepcopy(x)); kwargs...)
     solve_mixed(problem, options)
-    return permutedims(reshape(reduce(hcat, trace), problem.n, 2, options.n_points, :), [4, 3, 1, 2])
+    return permutedims(cat(trace, dims = 4), [4, 3, 1, 2])
 end

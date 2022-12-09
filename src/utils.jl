@@ -8,6 +8,28 @@ function as_Float64_Array(x::Union{Real, AbstractArray}, n::Int)
     return fill(convert(Float64, x), n)
 end
 
+
+# Helpers for combining arrays
+
+# stack arrays along a new dimension
+function stack(arrays...; dim::Integer = 1)
+    n = ndims(arrays[1])
+    @assert all(ndims(arrays[1]) == n for a in arrays[2:end])
+    return permutedims(cat(arrays..., dims = n+1), (1:dim-1..., n+1, dim:n...))
+end
+
+# recursively combine vectors of vectors [of vectors...] into a single ndarray
+function combine(v::Vector{T}) where {T <: AbstractVector}
+    return stack([combine(vv) for vv in v]...)
+end
+
+function combine(v::Vector{T}) where {T <: Number}
+    return v
+end
+
+
+# Some helpers for computing statistics on arrays over dimensions
+
 function broadcast_sum(x, dim::Integer)
     reshape(
         sum(x, dims = dim),
@@ -55,6 +77,8 @@ function to_rowvec(x::Vector)
     reshape(x, 1, :)
 end
 
+
+# checks if all slices of `array` along dimension `dim` are approximately equal
 function slices_approx_equal(array, dim, atol, rtol)
     all(
         isapprox(
@@ -69,6 +93,8 @@ function is_napprox_greater(a, b; rtol = EPSILON)
     a > b && !isapprox(a, b, rtol = rtol)
 end
 
+
+# convert from odds safe to proba safe, robust to nan & inf
 function get_proba(s::Real)
     proba = s / (1. + s)
     return if isnan(s) || isinf(s)

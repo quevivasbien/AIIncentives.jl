@@ -305,7 +305,7 @@ end
 
 # for results with no secondary variation and only one result per problem
 function get_plots(
-    res::ScenarioResult{SolverResult, 1};
+    res::ScenarioResult1D;
     xvals = nothing,
     labels = nothing,
     take_avg = false,
@@ -326,7 +326,7 @@ end
 
 # for scenarios with secondary variation
 function get_plots(
-    res::ScenarioResult{SolverResult, 2};
+    res::ScenarioResultWVar2;
     xvals = nothing,
     labels = nothing,
     take_avg = false,
@@ -347,7 +347,7 @@ end
 
 # for results with no secondary variation and multiple results per problem
 function get_plots(
-    res::ScenarioResult{Vector{SolverResult}, 1};
+    res::ScenarioResult2D;
     xvals = nothing,
     labels = nothing,
     take_avg = false,
@@ -369,7 +369,7 @@ end
 
 # for results with no secondary variation and only one result per problem
 function RecipesBase.plot(
-    res::ScenarioResult{SolverResult, 1};
+    res::ScenarioResult1D;
     xvals = nothing,
     labels = nothing,
     logscale = false,
@@ -397,7 +397,7 @@ end
 
 # for scenarios with secondary variation
 function RecipesBase.plot(
-    res::ScenarioResult{SolverResult, 2};
+    res::ScenarioResultWVar2;
     xvals = nothing,
     labels = nothing,
     logscale = false,
@@ -420,7 +420,7 @@ end
 
 # for results with no secondary variation and multiple results per problem
 function RecipesBase.plot(
-    res::ScenarioResult{Vector{SolverResult}, 1};
+    res::ScenarioResult2D;
     xvals = nothing,
     labels = nothing,
     logscale = false,
