@@ -109,3 +109,55 @@ function get_probas(s::AbstractVector{T}) where {T <: Real}
     probas[isnan.(s) .| isinf.(s)] .= 1
     return probas
 end
+
+
+# functions to help explore claims
+
+# helper for solve_left_right; combines two dicts of params and forms problems from their cartesian product
+function combine_params(params, base_params)
+    params = merge(params, base_params)
+    kwargs = [Dict(zip(keys(params), p)) for p in Iterators.product(values(params)...)]
+    problems = Array{Problem}(undef, size(kwargs))
+    Threads.@threads for idx in eachindex(kwargs)
+        problems[idx] = Problem(; kwargs[idx]...)
+    end
+    return problems
+end
+
+# helper for solve_left_right; solves a set of problems with params from params and base_params
+function solve_side(
+    params::Dict{Symbol, <:AbstractVector},
+    base_params::Dict{Symbol, <:AbstractVector};
+    solver_kwargs...
+)
+    problems = combine_params(params, base_params)
+    println("$(length(problems)) problems to solve...")
+    solutions = Array{SolverResult{Float64}}(undef, size(problems))
+    Threads.@threads for idx in eachindex(problems)
+        solutions[idx] = solve(problems[idx]; solver_kwargs...)
+    end
+    return solutions
+end
+
+# solve two sets of problems `left` and `right` with different sets of assumptions
+function solve_left_right(
+    # values in these dicts will be unique to respective problems
+    left::Dict{Symbol, <:AbstractVector},
+    right::Dict{Symbol, <:AbstractVector};
+    # values here will be common to both left and right problems
+    common::Dict{Symbol, <:AbstractVector} = Dict(
+        :A => 10. .^ range(-1, 3, length = 10),
+        :α => range(0.1, 0.9, length = 9),
+        :B => 10. .^ range(-1, 3, length = 10),
+        :β => range(0.1, 0.9, length = 9),
+        :θ => range(0., 2., length = 10),
+    ),
+    solver_kwargs...
+)
+    # finds solutions over all combinations of parameters
+    println("solving left side...")
+    left_sols = solve_side(left, common; solver_kwargs...)
+    println("solving right side...")
+    right_sols = solve_side(right, common; solver_kwargs...)
+    return left_sols, right_sols
+end
