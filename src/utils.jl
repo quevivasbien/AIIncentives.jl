@@ -1,11 +1,23 @@
 # Utility functions, not dependent on special types, used throughout the package
 
-function as_Float64_Array(x::Union{Real, AbstractArray}, n::Int)
-    if isa(x, AbstractArray)
-        @assert length(x) == n
-        return convert(Array{Float64}, x)
-    end
-    return fill(convert(Float64, x), n)
+# Helpers for coercing to Array and SArray types
+
+function as_Float64_Array(x::Real, n::Int)
+    return fill(Float64(x), n)
+end
+
+function as_Float64_Array(x::AbstractArray, n::Int)
+    @assert length(x) == n
+    return convert(Array{Float64}, x)
+end
+
+function as_SVector(x::Real, n::Int)
+    x = Float64(x)
+    return @SVector fill(x, n)
+end
+
+function as_SVector(x::AbstractVector, n::Int)
+    return SVector{n, Float64}(x)
 end
 
 
@@ -133,9 +145,11 @@ function solve_side(
     problems = combine_params(params, base_params)
     println("$(length(problems)) problems to solve...")
     solutions = Array{SolverResult{Float64}}(undef, size(problems))
+    time0 = time()
     Threads.@threads for idx in eachindex(problems)
         solutions[idx] = solve(problems[idx]; solver_kwargs...)
     end
+    println("finished in $(time() - time0) seconds ($(1000 * (time() - time0) / length(problems)) ms per problem)")
     return solutions
 end
 

@@ -21,28 +21,27 @@ Defines proba(safe) as weighted geometric mean of s / (1+s), to the nth power
 w is vector of weights
 if w is all ones, proba(safe) is simply the product of s / (1+s)
 """
-struct MultiplicativeRisk{T <: Real} <: RiskFunc
-    w::Vector{T}
-    cum_w::T  # sum of w
-    n::Int  # length of w
+struct MultiplicativeRisk{N} <: RiskFunc
+    w::SVector{N, Float64}
+    cum_w::Float64  # n / sum(w)
 end
 
 function MultiplicativeRisk(n::Int, w::T = 1.0) where {T <: Real}
     @assert n >= 2 "n must be at least 2"
-    w_ = convert(Float64, w)
-    return MultiplicativeRisk(fill(w_, n), w_, n)
+    w_ = as_SVector(w, n)
+    return MultiplicativeRisk(w_, 1. / w)
 end
 
-function MultiplicativeRisk(w::Vector{T}) where {T <: Real}
+function MultiplicativeRisk(w::AbstractVector{T}) where {T <: Real}
     n = length(w)
     @assert n >= 2 "n must be at least 2"
-    w_ = convert(Array{Float64}, w)
+    w_ = SVector{n, Float64}(w)
     return MultiplicativeRisk(w_, n / sum(w_), n)
 end
 
 function σ(
     rf::MultiplicativeRisk,
-    i::Int,
+    ::Int,
     s::AbstractVector{T}
 ) where {T <: Real}
     probas = get_probas(s)
@@ -54,36 +53,36 @@ function σ(
     s::AbstractVector{T}
 ) where {T <: Real}
     probas = get_probas(s)
-    return fill(prod(probas .* rf.w) ^ rf.cum_w, length(rf.w))
+    return @SVector fill(prod(probas .* rf.w) ^ rf.cum_w, length(rf.w))
 end
 
 
 """
-Defines proba(safe) as weighted arithmetic mean of s / (1+s)
+Defines proba(safe) as weighted arithmetic sum of s / (1+s)
 w is vector of weights
-if w is all ones, the proba(safe) is simply mean of s / (1+s)
+if w is all ones, the proba(safe) is simply sum of s / (1+s)
 """
-struct AdditiveRisk{T <: Real} <: RiskFunc
-    w::Vector{T}
+struct AdditiveRisk{N} <: RiskFunc
+    w::SVector{N, Float64}
     cum_w::T
 end
 
 function AdditiveRisk(n::Int, w::T = 1.0) where {T <: Real}
     @assert n >= 2 "n must be at least 2"
-    w_ = convert(Float64, w)
-    return AdditiveRisk(fill(w_, n), n / w_)
+    w_ = as_SVector(w, n)
+    return AdditiveRisk(w_, 1. / w)
 end
 
-function AdditiveRisk(w::Vector{T}) where {T <: Real}
+function AdditiveRisk(w::AbstractVector{T}) where {T <: Real}
     n = length(w)
     @assert n >= 2 "n must be at least 2"
-    w_ = convert(Array{Float64}, w)
+    w_ = SVector{n, Float64}(w)
     return AdditiveRisk(w_, n / sum(w_))
 end
 
 function σ(
     rf::AdditiveRisk,
-    i::Int,
+    ::Int,
     s::AbstractVector{T}
 ) where {T <: Real}
     probas = get_probas(s)
@@ -95,7 +94,7 @@ function σ(
     s::AbstractVector{T}
 ) where {T <: Real}
     probas = get_probas(s)
-    return fill(sum(probas .* rf.w) / rf.cum_w, length(rf.w))
+    return @SVector fill(sum(probas .* rf.w) / rf.cum_w, length(rf.w))
 end
 
 """
