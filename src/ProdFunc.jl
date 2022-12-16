@@ -35,7 +35,7 @@ or, equivalently,
 ```julia
 (s, p) = prodFunc(Xs, Xp)
 ```
-where `Xs` and `Xp` are vectors of length equal to `prodFunc.n`. Here `s` and `p` will be vectors representing the safety and performance of each player. To get the safety and performance of a single player with index `i`, just do
+where `Xs` and `Xp` are vectors of length equal to N. Here `s` and `p` will be vectors representing the safety and performance of each player. To get the safety and performance of a single player with index `i`, just do
 ```julia
 (s, p) = f(prodFunc, i, xs, xp)
 ```
@@ -129,9 +129,9 @@ end
 
 (prodFunc::ProdFunc)(Xs, Xp) = f(prodFunc, Xs, Xp)
 
-function is_symmetric(prodFunc::ProdFunc)
+function is_symmetric(prodFunc::ProdFunc{N}) where {N}
     all(
-        all(x[1] .== x[2:prodFunc.n])
+        all(x[1] .== x[2:N])
         for x in (prodFunc.A, prodFunc.α, prodFunc.B, prodFunc.β, prodFunc.θ)
     )
 end

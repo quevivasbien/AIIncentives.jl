@@ -107,19 +107,13 @@ end
 
 
 # convert from odds safe to proba safe, robust to nan & inf
-function get_proba(s::Real)
+function get_proba(s::Float64)
     proba = s / (1. + s)
     return if isnan(s) || isinf(s)
-        1::typeof(proba)
+        1.
     else
         proba
     end
-end
-
-function get_probas(s::AbstractVector{T}) where {T <: Real}
-    probas = s ./ (1. .+ s)
-    probas[isnan.(s) .| isinf.(s)] .= 1
-    return probas
 end
 
 

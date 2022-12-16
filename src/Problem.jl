@@ -3,15 +3,15 @@ Abstract type to allow insertion of alternate problem types
 
 Subtypes should implement `payoff`, `payoffs_with_s_p`, `payoffs`, `s_p_σ_payoffs`, `is_symmetric` and have an integer field `n`
 """
-abstract type AbstractProblem end
+abstract type AbstractProblem{N} end
 
 
-(problem::AbstractProblem)(i::Int, Xs::Vector, Xp::Vector) = payoff(problem, i, Xs, Xp)
+(problem::AbstractProblem)(i::Int, Xs::AbstractVector, Xp::AbstractVector) = payoff(problem, i, Xs, Xp)
 
-(problem::AbstractProblem)(Xs::Vector, Xp::Vector) = payoffs(problem, Xs, Xp)
+(problem::AbstractProblem)(Xs::AbstractVector, Xp::AbstractVector) = payoffs(problem, Xs, Xp)
 
-function get_func(problem::AbstractProblem, i::Int, strats::Array)
-    strats_ = copy(strats)
+function get_func(problem::AbstractProblem, i::Int, strats::AbstractArray)
+    strats_ = deepcopy(strats)
     function func(x)
         strats_[i, :] = x
         return -payoff(problem, i, strats_[:, 1], strats_[:, 2])
@@ -57,12 +57,11 @@ or
 problem(i, Xs, Xp)
 ```
 
-(Note that in the above, `Xs` and `Xp` are vectors of length `problem.n`.)
+(Note that in the above, `Xs` and `Xp` are vectors of length N.)
 """
-struct Problem{T <: Real, R <: RiskFunc, C <: CSF, P <: PayoffFunc, K <: CostFunc} <: AbstractProblem
-    n::Int
-    d::Vector{T}
-    prodFunc::ProdFunc{T}
+struct Problem{N, R <: RiskFunc, C <: CSF, P <: PayoffFunc{N}, K <: CostFunc{N}} <: AbstractProblem{N}
+    d::SVector{N, Float64}
+    prodFunc::ProdFunc{N}
     riskFunc::R
     csf::C
     payoffFunc::P
@@ -87,7 +86,7 @@ function Problem(
     @assert n >= 2
     
     d = if haskey(kwargs, :d)
-        as_Float64_Array(kwargs[:d], n)
+        as_SVector(kwargs[:d], n)
     else
         default_d
     end
@@ -105,7 +104,7 @@ function Problem(
             ProdFunc(default_prodFunc; prodFunc_kwargs...)
         end
     end
-    @assert n == prodFunc.n
+    @assert prodFunc isa ProdFunc{n}
 
     costFunc = if haskey(kwargs, :costFunc)
         kwargs[:costFunc]
@@ -117,13 +116,13 @@ function Problem(
             CertificationCost(kwargs[:r0], kwargs[:r1], kwargs[:s_thresh], prodFunc)
         end
     elseif haskey(kwargs, :rs) && haskey(kwargs, :rp)
-        FixedUnitCost2(as_Float64_Array(kwargs[:rs], n), as_Float64_Array(kwargs[:rp], n))
+        FixedUnitCost2(as_SVector(kwargs[:rs], n), as_SVector(kwargs[:rp], n))
     elseif haskey(kwargs, :r)
-        FixedUnitCost(n, as_Float64_Array(kwargs[:r], n))
+        FixedUnitCost(as_SVector(kwargs[:r], n))
     else
         default_costFunc
     end
-    @assert n == costFunc.n
+    @assert costFunc isa CostFunc{n}
 
     riskFunc = if haskey(kwargs, :riskFunc)
         kwargs[:riskFunc]
@@ -142,9 +141,9 @@ function Problem(
     else
         default_payoffFunc
     end
-    @assert n == payoffFunc.n
+    @assert payoffFunc isa PayoffFunc{n}
 
-    return Problem(n, d, prodFunc, riskFunc, csf, payoffFunc, costFunc)
+    return Problem(d, prodFunc, riskFunc, csf, payoffFunc, costFunc)
 end
 
 """
@@ -179,13 +178,19 @@ function Problem(
     n::Int = 2,
     kwargs...
 )
+    default_d = @SVector zeros(n)
+    default_CostFunc = FixedUnitCost(n, 0.1)
+    default_ProdFunc = ProdFunc(; n)
+    default_RiskFunc = WinnerOnlyRisk()
+    default_CSF = BasicCSF()
+    default_PayoffFunc = LinearPayoff(n)
     return Problem(
-        zeros(n),
-        FixedUnitCost(n, fill(0.1, n)),
-        ProdFunc(),
-        WinnerOnlyRisk(),
-        BasicCSF(),
-        LinearPayoff(n),
+        default_d,
+        default_CostFunc,
+        default_ProdFunc,
+        default_RiskFunc,
+        default_CSF,
+        default_PayoffFunc,
         n = n;
         kwargs...
     )
@@ -195,9 +200,9 @@ end
 Construct a problem from a pre-built problem, with some changes
 """
 function Problem(
-    problem::Problem;
+    problem::Problem{N};
     kwargs...
-)
+) where {N}
     Problem(
         problem.d,
         problem.costFunc,
@@ -205,16 +210,16 @@ function Problem(
         problem.riskFunc,
         problem.csf,
         problem.payoffFunc,
-        n = problem.n;
+        n = N;
         kwargs...
     )
 end
 
-function payoff(problem::Problem, i::Int, Xs::Vector, Xp::Vector)
+function payoff(problem::Problem{N}, i::Int, Xs::AbstractVector, Xp::AbstractVector) where {N}
     (s, p) = problem.prodFunc(Xs, Xp)
     proba_win = problem.csf(p)  # probability that each player wins
     (pf_win, pf_lose) = problem.payoffFunc(i, p[i])  # payoffs if player i wins/loses
-    payoffs_ = [(j == i) ? pf_win : pf_lose for j in 1:problem.n]
+    payoffs_ = [(j == i) ? pf_win : pf_lose for j in 1:N]
     σis = problem.riskFunc(s)  # vector of proba(safe) conditional on each player winning
     cond_σ = proba_win .* σis
     if problem.payoffFunc isa PayoffOnDisaster && problem.payoffFunc.whogets[i]
@@ -224,11 +229,11 @@ function payoff(problem::Problem, i::Int, Xs::Vector, Xp::Vector)
     end
 end
 
-function payoffs_with_s_p(problem::Problem, Xs::Vector, Xp::Vector, s::Vector, p::Vector)
+function payoffs_with_s_p(problem::Problem{N}, Xs::AbstractVector, Xp::AbstractVector, s::AbstractVector, p::AbstractVector) where {N}
     proba_win = problem.csf(p)  # probability that each player wins
     # construct matrix of payoffs
     (pf_win, pf_lose) = problem.payoffFunc(p)  # payoffs if each player wins/loses
-    payoffs_ = repeat(pf_lose, 1, problem.n)
+    payoffs_ = repeat(pf_lose, 1, N)
     payoffs_[diagind(payoffs_)] = pf_win
     σis = problem.riskFunc(s)  # vector of proba(safe) conditional on each player winning
     cond_σ = proba_win .* σis  # proba that i wins and outcome is safe
@@ -245,7 +250,7 @@ function payoffs_with_s_p(problem::Problem, Xs::Vector, Xp::Vector, s::Vector, p
     end
 end
 
-function payoffs(problem::Problem, Xs::Vector, Xp::Vector)
+function payoffs(problem::Problem, Xs::AbstractVector, Xp::AbstractVector)
     (s, p) = problem.prodFunc(Xs, Xp)
     return payoffs_with_s_p(problem, Xs, Xp, s, p)
 end
@@ -258,11 +263,11 @@ function s_p_σ_payoffs(problem::Problem, Xs_, Xp_)
     return s, p, σ, payoffs_
 end
 
-function is_symmetric(problem::Problem)
+function is_symmetric(problem::Problem{N}) where {N}
     (
         is_symmetric(problem.prodFunc)
         && is_symmetric(problem.costFunc)
-        && all(problem.d[1] .== problem.d[2:problem.n])
+        && all(problem.d[1] .== problem.d[2:N])
     )
 end
 
@@ -274,20 +279,21 @@ It is assumed that players know each other's beliefs (though maybe nobody has co
 
 Contains a true Problem `baseProblem`, but also a vector `beliefs` of Problems, which are the Problems that each player thinks they are dealing with
 """
-struct ProblemWithBeliefs{T <: Problem} <: AbstractProblem
-    n::Int
+struct ProblemWithBeliefs{N, T <: AbstractProblem{N}} <: AbstractProblem{N}
     baseProblem::T
-    beliefs::Vector{T}
+    beliefs::SVector{N, T}
 end
 
 function ProblemWithBeliefs(
     baseProblem::T = Problem();
-    beliefs::Vector{T} = fill(Problem(), Problem().n)
-) where {T <: Problem}
-    n = baseProblem.n
-    @assert n == length(beliefs) "Length of beliefs needs to match baseProblem.n"
-    @assert all(n == problem.n for problem in beliefs) "Beliefs need to have same n as base problem"
-    return ProblemWithBeliefs(n, baseProblem, beliefs)
+    beliefs::Union{AbstractVector{T}, Nothing} = nothing
+) where {N, T <: AbstractProblem{N}}
+    beliefs = if isnothing(beliefs)
+        @SVector fill(baseProblem, N)
+    else
+        SVector{N, T}(beliefs)
+    end
+    return ProblemWithBeliefs(baseProblem, beliefs)
 end
 
 
@@ -314,7 +320,7 @@ is_symmetric(problem::ProblemWithBeliefs) = (
 
 function ProblemWithBeliefs(
     baseProblem,
-    beliefs::Vector{Dict{Symbol, Any}}
+    beliefs::AbstractVector{Dict{Symbol, Any}}
 )
     return ProblemWithBeliefs(
         baseProblem,

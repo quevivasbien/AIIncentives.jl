@@ -44,7 +44,7 @@ function σ(
     ::Int,
     s::AbstractVector{T}
 ) where {T <: Real}
-    probas = get_probas(s)
+    probas = get_proba.(s)
     return prod(probas .* rf.w) ^ rf.cum_w
 end
 
@@ -52,7 +52,7 @@ function σ(
     rf::MultiplicativeRisk,
     s::AbstractVector{T}
 ) where {T <: Real}
-    probas = get_probas(s)
+    probas = get_proba.(s)
     return @SVector fill(prod(probas .* rf.w) ^ rf.cum_w, length(rf.w))
 end
 
@@ -64,7 +64,7 @@ if w is all ones, the proba(safe) is simply sum of s / (1+s)
 """
 struct AdditiveRisk{N} <: RiskFunc
     w::SVector{N, Float64}
-    cum_w::T
+    cum_w::Float64
 end
 
 function AdditiveRisk(n::Int, w::T = 1.0) where {T <: Real}
@@ -85,7 +85,7 @@ function σ(
     ::Int,
     s::AbstractVector{T}
 ) where {T <: Real}
-    probas = get_probas(s)
+    probas = get_proba.(s)
     return sum(probas .* rf.w) / rf.cum_w
 end
 
@@ -93,7 +93,7 @@ function σ(
     rf::AdditiveRisk,
     s::AbstractVector{T}
 ) where {T <: Real}
-    probas = get_probas(s)
+    probas = get_proba.(s)
     return @SVector fill(sum(probas .* rf.w) / rf.cum_w, length(rf.w))
 end
 
@@ -114,5 +114,5 @@ function σ(
     ::WinnerOnlyRisk,
     s::AbstractVector{T}
 ) where {T <: Real}
-    return get_probas(s)
+    return get_proba.(s)
 end

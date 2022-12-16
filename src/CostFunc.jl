@@ -1,8 +1,8 @@
 """
 Determines cost of inputs
-Subtypes should implement `cost` and `is_symmetric` and have an field `n` of type Int
+Subtypes should implement `cost` and `is_symmetric`
 """
-abstract type CostFunc end
+abstract type CostFunc{N} end
 
 function (c::CostFunc)(i::Int, Xs::AbstractVector, Xp::AbstractVector)
     return cost(c, i, Xs, Xp)
@@ -17,18 +17,16 @@ function cost(c::CostFunc, Xs, Xp)
     return cost.(Ref(c), 1:c.n, Ref(Xs), Ref(Xp))
 end
 
-mutable struct FixedUnitCost{T <: Real} <: CostFunc
-    const n::Int
-    r::Vector{T}
+mutable struct FixedUnitCost{N} <: CostFunc{N}
+    r::SVector{N, Float64}
 end
 
-function FixedUnitCost(r::Vector{T}) where {T <: Real}
-    n = length(r)
-    return FixedUnitCost(n, r)
+function FixedUnitCost(r::AbstractVector{T}) where {T <: Real}
+    return FixedUnitCost(SVector{length(r), Float64}(r))
 end
 
-function FixedUnitCost(n::Int, r::T) where T <: Real
-    return FixedUnitCost(n, fill(r, n))
+function FixedUnitCost(n::Int, r::Real)
+    return FixedUnitCost(as_SVector(r, n))
 end
 
 function cost(c::FixedUnitCost, i::Int, Xs, Xp)
@@ -47,19 +45,22 @@ end
 """
 Like FixedUnitCost but with different prices for Xs and Xp
 """
-mutable struct FixedUnitCost2{T <: Real} <: CostFunc
-    const n::Int
-    r::Matrix{T}
+mutable struct FixedUnitCost2{N} <: CostFunc{N}
+    # r has a column for each of rs and rp
+    # each row corresponds to a different player
+    r::SMatrix{N, 2, Float64}
 end
 
-function FixedUnitCost2(rs::Vector{T}, rp::Vector{T}) where {T <: Real}
+function FixedUnitCost2(rs::AbstractVector, rp::AbstractVector)
     n = length(rs)
     @assert n == length(rp) "rs and rp must have same length"
-    return FixedUnitCost2(n, [rs rp])
+    return FixedUnitCost2([as_SVector(rs, n) as_SVector(rp, n)])
 end
 
-function FixedUnitCost2(n::Int, rs::T, rp::T) where {T <: Real}
-    return FixedUnitCost2(n, repeat([rs rp], n))
+function FixedUnitCost2(n::Int, rs::Real, rp::Real)
+    rs = @SVector fill(Float64(rs), n)
+    rp = @SVector fill(Float64(rp), n)
+    return FixedUnitCost2([rs rp])
 end
 
 function cost(c::FixedUnitCost2, i::Int, Xs, Xp)
@@ -80,19 +81,22 @@ Costs change linearly in Xs, Xp
 Marginal cost of (Xs, Xp) is r0[1] + r1[1] * Xs + r0[2] + r1[2] * Xp
 => Total cost is r0[1] * Xs + r1[1] * Xs^2 / 2 + r0[2] * Xp + r1[2] * Xp^2 / 2
 """
-mutable struct LinearCost{T <: Real} <: CostFunc
-    const n::Int
-    r0::Matrix{T}
-    r1::Matrix{T}
+mutable struct LinearCost{N} <: CostFunc{N}
+    r0::SMatrix{N, 2, Float64}
+    r1::SMatrix{N, 2, Float64}
 end
 
-function LinearCost(n::Int, r0::T, r1::T) where {T <: Real}
-    return LinearCost(n, fill(r0, n, 2), fill(r1, n, 2))
+function LinearCost(n::Int, r0::Float64, r1::Float64)
+    r0 = @SMatrix fill(r0, n, 2)
+    r1 = @SMatrix fill(r1, n, 2)
+    return LinearCost(r0, r1)
 end
 
-function LinearCost(n::Int, r0::Vector{T}, r1::Vector{T}) where {T <: Real}
+# this method sets same prices for all players, but different prices for rs and rp
+# r0 and r1 should each be vectors, one entry for each of rs and rp
+function LinearCost(n::Int, r0::AbstractVector{T}, r1::AbstractVector{T}) where {T <: Real}
     @assert length(r0) == 2 && length(r1) == 2 "r0 and r1 should both have length 2 (one entry for Xs, one for Xp)"
-    return LinearCost(n, repeat(r0', 2), repeat(r1', 2))
+    return LinearCost(n, repeat(r0', n), repeat(r1', n))
 end
 
 function cost(c::LinearCost, i::Int, Xs, Xp)
@@ -111,12 +115,11 @@ end
 """
 A cost schedule where players pay a fixed unit cost r0 if their safety is less than a threshold `s_thresh` and a fixed unit cost r1 otherwise
 """
-mutable struct CertificationCost{T <: Real} <: CostFunc
-    const n::Int
-    r0::Vector{T}
-    r1::Vector{T}
-    s_thresh::Vector{T}
-    const prodFunc::ProdFunc{T}
+mutable struct CertificationCost{N} <: CostFunc{N}
+    r0::SVector{N, Float64}
+    r1::SVector{N, Float64}
+    s_thresh::SVector{N, Float64}
+    const prodFunc::ProdFunc{N}
 end
 
 """
@@ -127,13 +130,12 @@ function CertificationCost(
     r0::Real,
     r1::Real,
     s_thresh::Real,
-    prodFunc::ProdFunc{Float64},
+    prodFunc::ProdFunc,
 )
     return CertificationCost(
-        n,
-        as_Float64_Array(r0, n),
-        as_Float64_Array(r1, n),
-        as_Float64_Array(s_thresh, n),
+        as_SVector(r0, n),
+        as_SVector(r1, n),
+        as_SVector(s_thresh, n),
         prodFunc
     )
 end
@@ -145,15 +147,13 @@ function CertificationCost(
     r0::AbstractVector,
     r1::AbstractVector,
     s_thresh::AbstractVector,
-    prodFunc::ProdFunc{Float64},
-)
-    n = length(r0)
-    @assert n == length(r1) == length(s_thresh) "r0, r1, and s_thresh must have same length"
+    prodFunc::ProdFunc{N},
+) where {N}
+    @assert N == length(r0) == length(r1) == length(s_thresh) "r0, r1, and s_thresh must have same length as prodFunc's N"
     return CertificationCost(
-        n,
-        convert(Vector{Float64}, r0),
-        convert(Vector{Float64}, r1),
-        convert(Vector{Float64}, s_thresh),
+        SVector{N, Float64}(r0),
+        SVector{N, Float64}(r1),
+        SVector{N, Float64}(s_thresh),
         prodFunc
     )
 end
