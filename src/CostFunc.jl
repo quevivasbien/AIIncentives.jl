@@ -13,8 +13,8 @@ function (c::CostFunc)(Xs::AbstractVector, Xp::AbstractVector)
 end
 
 # default impl if not implemented manually
-function cost(c::CostFunc, Xs, Xp)
-    return cost.(Ref(c), 1:c.n, Ref(Xs), Ref(Xp))
+function cost(c::CostFunc{N}, Xs, Xp) where {N}
+    return cost.(Ref(c), 1:N, Ref(Xs), Ref(Xp))
 end
 
 mutable struct FixedUnitCost{N} <: CostFunc{N}
