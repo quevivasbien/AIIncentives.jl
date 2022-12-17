@@ -35,11 +35,11 @@ function SolverOptions(options::SolverOptions; kwargs...)
     return SolverOptions(fields...)
 end
 
-function get_init_guess(options::SolverOptions, shape)
+function get_init_guess(options::SolverOptions, n)
     if isnothing(options.init_guess)
-        return exp.(options.init_mu .+ options.init_sigma .* randn(shape))
+        return exp.(options.init_mu .+ options.init_sigma .* @MMatrix randn(n, 2))
     else
-        return fill(options.init_guess, shape)
+        return @MMatrix fill(options.init_guess, n, 2)
     end
 end
 
@@ -116,7 +116,7 @@ function verify_i(problem, i, Xs, Xp, payoffs_, options)
     return true
 end
 
-function verify(problem, strat, options)
+function verify(problem::AbstractProblem{N}, strat::AbstractMatrix, options::SolverOptions) where {N}
     if !check_symmetric(problem, strat, options)
         return false
     end
@@ -124,7 +124,7 @@ function verify(problem, strat, options)
     Xs = strat[:, 1]
     Xp = strat[:, 2]
     payoffs_ = payoffs(problem, Xs, Xp)
-    for i in 1:problem.n
+    for i in 1:N
         if !verify_i(problem, i, Xs, Xp, payoffs_, options)
             return false
         end
@@ -132,15 +132,15 @@ function verify(problem, strat, options)
     return true
 end
 
-function verify(problem::ProblemWithBeliefs, strat, options)
+function verify(problem::ProblemWithBeliefs{N}, strat, options) where {N}
     if !check_symmetric(problem, strat, options)
         return false
     end
 
     Xs = strat[:, 1]
     Xp = strat[:, 2]
-    payoffs_ = [payoff(problem.beliefs[i], i, Xs, Xp) for i in 1:problem.n]
-    for i in 1:problem.n
+    payoffs_ = [payoff(problem.beliefs[i], i, Xs, Xp) for i in 1:N]
+    for i in 1:N
         if !verify_i(problem.beliefs[i], i, Xs, Xp, payoffs_, options)
             return false
         end
@@ -177,11 +177,11 @@ end
 
 # calculates optimal strategy for all players given other players' optima from last iteration
 function solve_single_iter(
-    problem::Problem, strat::Array,
+    problem::AbstractProblem{N}, strat::AbstractArray,
     options = SolverOptions()
-)
+) where {N}
     new_strats = similar(strat)
-    for i in 1:problem.n
+    for i in 1:N
         new_strats[i, :] = single_iter_for_i(problem, strat, i, strat[i, :], options)
     end
     return new_strats
@@ -219,10 +219,10 @@ function suggest_iter_strat(problem, init_guess, options)
 end
 
 function solve_iters(
-    problem,
+    problem::AbstractProblem{N},
     options = SolverOptions()
-)
-    init_guess = get_init_guess(options, (problem.n, 2))
+) where {N}
+    init_guess = get_init_guess(options, N)
     converged, strat = suggest_iter_strat(problem, init_guess, options)
     success = converged && (!options.verify || verify(problem, strat, options))
     if success || options.retries == 0
@@ -242,9 +242,9 @@ end
 # Runs iter_solve from multiple init points and compares results
 
 function solve_scatter(
-    problem::Problem,
+    problem::AbstractProblem{N},
     options = SolverOptions()
-)
+) where {N}
     # draw init points from log-normal distribution
     results = SolverResult[]
     Threads.@threads for i in 1:options.n_points
@@ -258,7 +258,7 @@ function solve_scatter(
     end
     if length(results) == 0
         println("None of the solver iterations converged.")
-        return [get_null_result(problem.n)]
+        return [get_null_result(N)]
     end
     return results
 end
@@ -300,9 +300,9 @@ function single_mixed_iter_for_i(problem, history, i, init_guess, options = Solv
     end
 end
 
-function single_mixed_iter(problem, history, init_guess, options = SolverOptions())
-    new_strat = Array{Float64}(undef, problem.n, 2)
-    for i in 1:problem.n
+function single_mixed_iter(problem::AbstractProblem{N}, history, init_guess, options = SolverOptions()) where {N}
+    new_strat = Array{Float64}(undef, N, 2)
+    for i in 1:N
         new_strat[i, :] = single_mixed_iter_for_i(problem, history, i, init_guess[i, :], options)
     end
     return new_strat
@@ -325,11 +325,11 @@ function expected_payoffs(problem, history)
 end
 
 function solve_mixed(
-    problem::Problem,
+    problem::Problem{N},
     options = SolverOptions()
-)
+) where {N}
     # draw init points from log-normal distribution
-    history = exp.(options.init_mu .+ options.init_sigma .* randn(problem.n, 2, options.n_points))
+    history = exp.(options.init_mu .+ options.init_sigma .* randn(N, 2, options.n_points))
     if !isnothing(options.callback)
         options.callback(history)
     end
@@ -362,7 +362,7 @@ end
 
 # HYBRID METHOD (Runs solve_iter, then solve_mixed if that is unsuccessful. Finds only pure strategies.)
 
-function attempt_mixed(problem, options)
+function attempt_mixed(problem::Problem{N}, options) where {N}
     mixed_sol = solve_mixed(problem, SolverOptions(options))
     if (
         mixed_sol.success
@@ -383,7 +383,7 @@ function attempt_mixed(problem, options)
             println("| solution was Xs = $(mixed_sol.Xs), Xp = $(mixed_sol.Xp)")
             println("∟ returning null result")
         end
-        return get_null_result(problem.n)
+        return get_null_result(N)
     end
 end
 
@@ -434,11 +434,11 @@ end
 # Just need to have single_iter_for_i use each player's beliefs
 
 function solve_single_iter(
-    problem::ProblemWithBeliefs, strat::Array,
+    problem::ProblemWithBeliefs{N}, strat::Array,
     options = SolverOptions()
-)
+) where {N}
     new_strats = similar(strat)
-    for i in 1:problem.n
+    for i in 1:N
         new_strats[i, :] = single_iter_for_i(problem.beliefs[i], strat, i, strat[i, :], options)
     end
     return new_strats

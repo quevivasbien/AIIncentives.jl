@@ -1,5 +1,6 @@
 # import dependencies and load module components
 
+using StaticArrays
 using Optim
 using Plots
 using Plots: RecipesBase.plot

@@ -35,7 +35,7 @@ or, equivalently,
 ```julia
 (s, p) = prodFunc(Xs, Xp)
 ```
-where `Xs` and `Xp` are vectors of length equal to `prodFunc.n`. Here `s` and `p` will be vectors representing the safety and performance of each player. To get the safety and performance of a single player with index `i`, just do
+where `Xs` and `Xp` are vectors of length equal to N. Here `s` and `p` will be vectors representing the safety and performance of each player. To get the safety and performance of a single player with index `i`, just do
 ```julia
 (s, p) = f(prodFunc, i, xs, xp)
 ```
@@ -45,13 +45,12 @@ or, equivalently,
 ```
 where `xs` and `xp` are both scalar values; the outputs `s` and `p` will also be scalar.
 """
-struct ProdFunc{T <: Real}
-    n::Int
-    A::Vector{T}
-    α::Vector{T}
-    B::Vector{T}
-    β::Vector{T}
-    θ::Vector{T}
+struct ProdFunc{N}
+    A::SVector{N, Float64}
+    α::SVector{N, Float64}
+    B::SVector{N, Float64}
+    β::SVector{N, Float64}
+    θ::SVector{N, Float64}
 end
 
 function ProdFunc(
@@ -61,37 +60,37 @@ function ProdFunc(
 )
     @assert n >= 2 "n must be at least 2"
     A = if haskey(kwargs, :A)
-        as_Float64_Array(kwargs[:A], n)
+        as_SVector(kwargs[:A], n)
     else
-        fill(10., n)
+        @SVector fill(10., n)
     end
     α = if haskey(kwargs, :α)
-        as_Float64_Array(kwargs[:α], n)
+        as_SVector(kwargs[:α], n)
     elseif haskey(kwargs, :alpha)
-        as_Float64_Array(kwargs[:alpha], n)
+        as_SVector(kwargs[:alpha], n)
     else
-        fill(0.5, n)
+        @SVector fill(0.5, n)
     end
     B = if haskey(kwargs, :B)
-        as_Float64_Array(kwargs[:B], n)
+        as_SVector(kwargs[:B], n)
     else
-        fill(10., n)
+        @SVector fill(10., n)
     end
     β = if haskey(kwargs, :β)
-        as_Float64_Array(kwargs[:β], n)
+        as_SVector(kwargs[:β], n)
     elseif haskey(kwargs, :beta)
-        as_Float64_Array(kwargs[:beta], n)
+        as_SVector(kwargs[:beta], n)
     else
-        fill(0.5, n)
+        @SVector fill(0.5, n)
     end
     θ = if haskey(kwargs, :θ)
-        as_Float64_Array(kwargs[:θ], n)
+        as_SVector(kwargs[:θ], n)
     elseif haskey(kwargs, :theta)
-        as_Float64_Array(kwargs[:theta], n)
+        as_SVector(kwargs[:theta], n)
     else
-        fill(0.25, n)
+        @SVector fill(0.25, n)
     end
-    return ProdFunc(n, A, α, B, β, θ)
+    return ProdFunc(A, α, B, β, θ)
 end
 
 ProdFunc(A, α, B, β, θ) = ProdFunc(n=length(A), A=A, α=α, B=B, β=β, θ=θ)
@@ -117,17 +116,22 @@ end
 # allow direct calling of prodFunc
 (prodFunc::ProdFunc)(i::Int, Xs::Number, Xp::Number) = f(prodFunc, i, Xs, Xp)
 
-function f(prodFunc::ProdFunc, Xs::Vector, Xp::Vector)
+
+function f(prodFunc::ProdFunc, Xs::SVector, Xp::SVector)
     p = prodFunc.B .* Xp.^prodFunc.β
     s = prodFunc.A .* Xs.^prodFunc.α .* p.^(-prodFunc.θ)
     return s, p
 end
 
-(prodFunc::ProdFunc)(Xs::Vector, Xp::Vector) = f(prodFunc, Xs, Xp)
+function f(prodFunc::ProdFunc{N}, Xs::AbstractVector, Xp::AbstractVector) where {N}
+    return f(prodFunc, SVector{N}(Xs), SVector{N}(Xp))
+end
 
-function is_symmetric(prodFunc::ProdFunc)
+(prodFunc::ProdFunc)(Xs, Xp) = f(prodFunc, Xs, Xp)
+
+function is_symmetric(prodFunc::ProdFunc{N}) where {N}
     all(
-        all(x[1] .== x[2:prodFunc.n])
+        all(x[1] .== x[2:N])
         for x in (prodFunc.A, prodFunc.α, prodFunc.B, prodFunc.β, prodFunc.θ)
     )
 end
