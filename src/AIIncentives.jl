@@ -41,9 +41,12 @@ export
     plot_payoffs,
     plot_payoffs_near_solution,
 
-    f,
-    payoff,
-    payoffs
+    σ,  # σ(::RiskFunc, ...)
+    cost,  # cost(::CostFunc, ...)
+    f,  # f(::ProdFunc, ...)
+    payoff,  # payoff(::AbstractProblem, ...)
+    payoffs,  # payoffs(::AbstractProblem, ...)
+    is_symmetric
 
 
 include("includes.jl")
