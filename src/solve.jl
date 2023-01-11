@@ -132,7 +132,7 @@ function verify(problem::AbstractProblem{N}, strat::AbstractMatrix, options::Sol
     return true
 end
 
-function verify(problem::ProblemWithBeliefs{N}, strat, options) where {N}
+function verify(problem::ProblemWithBeliefs{N}, strat::AbstractMatrix, options::SolverOptions) where {N}
     if !check_symmetric(problem, strat, options)
         return false
     end
