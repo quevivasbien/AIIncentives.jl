@@ -71,8 +71,8 @@ function verify_i(problem, i, Xs, Xp, payoffs_, options)
         (Xp[i] == 0) ? EPSILON : options.verify_mult * Xp[i],
         i
     )
-    lower_Xs = setindex!(copy(Xs), Xs[i] * options.verify_mult, i)
-    lower_Xp = setindex!(copy(Xp), Xp[i] * options.verify_mult, i)
+    lower_Xs = setindex!(copy(Xs), Xs[i] / options.verify_mult, i)
+    lower_Xp = setindex!(copy(Xp), Xp[i] / options.verify_mult, i)
 
     payoff_higher_Xs = payoff(problem, i, higher_Xs, Xp)
     payoff_higher_Xp = payoff(problem, i, Xs, higher_Xp)
@@ -177,7 +177,7 @@ end
 
 # calculates optimal strategy for all players given other players' optima from last iteration
 function solve_single_iter(
-    problem::AbstractProblem{N}, strat::AbstractArray,
+    problem::AbstractProblem{N}, strat::AbstractMatrix,
     options = SolverOptions()
 ) where {N}
     new_strats = similar(strat)
@@ -434,7 +434,7 @@ end
 # Just need to have single_iter_for_i use each player's beliefs
 
 function solve_single_iter(
-    problem::ProblemWithBeliefs{N}, strat::Array,
+    problem::ProblemWithBeliefs{N}, strat::AbstractMatrix,
     options = SolverOptions()
 ) where {N}
     new_strats = similar(strat)
