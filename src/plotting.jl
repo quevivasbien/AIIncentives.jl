@@ -279,7 +279,7 @@ function get_xvals_for_result_plot(res::ScenarioResult)
         "Warning: varying param is not a single value for all players, ",
         "using 1:n_steps as xvals -- specify xvals manually to change this"
     )
-    1:scenario.n_steps
+    1:res.scenario.n_steps
 end
 
 function get_labels_for_plot(res::ScenarioResult, labels = nothing)
