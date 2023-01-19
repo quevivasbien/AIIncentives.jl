@@ -31,11 +31,11 @@ function stack(arrays...; dim::Integer = 1)
 end
 
 # recursively combine vectors of vectors [of vectors...] into a single ndarray
-function combine(v::Vector{T}) where {T <: AbstractVector}
+function combine(v::AbstractVector{T}) where {T <: AbstractVector}
     return stack([combine(vv) for vv in v]...)
 end
 
-function combine(v::Vector{T}) where {T <: Number}
+function combine(v::AbstractVector{T}) where {T <: Number}
     return v
 end
 
