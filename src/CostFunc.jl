@@ -123,7 +123,7 @@ struct CertificationCost{N} <: CostFunc{N}
 end
 
 """
-construct CertificationCost with same r0 and r1 for all players
+construct CertificationCost with same r0, r1, and s_thresh for all players
 """
 function CertificationCost(
     n::Int,
@@ -141,7 +141,7 @@ function CertificationCost(
 end
 
 """
-construct CertificationCost with different r0 and r1 for players
+construct CertificationCost with different r0, r1, and s_thresh for players
 """
 function CertificationCost(
     r0::AbstractVector,
@@ -164,6 +164,75 @@ function cost(c::CertificationCost, i::Int, Xs, Xp)
     return r * (Xs[i] + Xp[i])
 end
 
+function cost(c::CertificationCost, Xs, Xp)
+    (s, _) = c.prodFunc(Xs, Xp)
+    qualifies = s .< c.s_thresh
+    return (c.r1 .* qualifies .+ c.r0 .* (1 .- qualifies)) .* (Xs .+ Xp)
+end
+
 function is_symmetric(c::CertificationCost)
-    return all(c.r0[1] .== c.r0[2:end]) && all(c.r1[1] .== c.r1[2:end])
+    return all(c.r0[1] .== c.r0[2:end]) && all(c.r1[1] .== c.r1[2:end]) && all(c.s_thresh[1] .== c.s_thresh[2:end])
+end
+
+
+"""
+A cost schedule where players pay a fixed unit cost r, plus a penalty δ if their safety is below a threshold `s_thresh`
+"""
+struct PenaltyCost{N} <: CostFunc{N}
+    r::MVector{N, Float64}
+    δ::MVector{N, Float64}
+    s_thresh::MVector{N, Float64}
+    prodFunc::ProdFunc{N}
+end
+
+"""
+construct PenaltyCost with same values for all players
+"""
+function PenaltyCost(
+    n::Int,
+    r::Real,
+    δ::Real,
+    s_thresh::Real,
+    prodFunc::ProdFunc,
+)
+    return PenaltyCost(
+        fill(r, MVector{n}),
+        fill(δ, MVector{n}),
+        fill(s_thresh, MVector{n}),
+        prodFunc
+    )
+end
+
+"""
+construct PenaltyCost with different values for players
+"""
+function PenaltyCost(
+    r::AbstractVector,
+    δ::AbstractVector,
+    s_thresh::AbstractVector,
+    prodFunc::ProdFunc{N},
+) where {N}
+    @assert N == length(r) == length(δ) == length(s_thresh) "r, δ, and s_thresh must have same length as prodFunc's N"
+    return PenaltyCost(
+        MVector{N, Float64}(r),
+        MVector{N, Float64}(δ),
+        MVector{N, Float64}(s_thresh),
+        prodFunc
+    )
+end
+
+function cost(c::PenaltyCost, i::Int, Xs, Xp)
+    (s, _) = c.prodFunc(i, Xs[i], Xp[i])
+    penalty = s < c.s_thresh[i] ? c.δ[i] : 0
+    return c.r[i] * (Xs[i] + Xp[i]) + penalty
+end
+
+function cost(c::PenaltyCost, Xs, Xp)
+    (s, _) = c.prodFunc(Xs, Xp)
+    gets_penalty = s .< c.s_thresh
+    return c.r .* (Xs .+ Xp) .+ c.δ .* gets_penalty
+end
+
+function is_symmetric(c::PenaltyCost)
+    return all(c.r[1] .== c.r[2:end]) && all(c.δ[1] .== c.δ[2:end]) && all(c.s_thresh[1] .== c.s_thresh[2:end])
 end

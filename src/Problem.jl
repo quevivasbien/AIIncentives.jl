@@ -110,15 +110,13 @@ function Problem(
         kwargs[:costFunc]
     elseif haskey(kwargs, :r0) && haskey(kwargs, :r1)
         @assert haskey(kwargs, :s_thresh) "Found r0 and r1, implying CertificationCost, but s_thresh was not provided"
-        if typeof(kwargs[:r0]) <: Number
-            CertificationCost(n, kwargs[:r0], kwargs[:r1], kwargs[:s_thresh], prodFunc)
-        else  # assume r0 and r1 are vectors
-            CertificationCost(kwargs[:r0], kwargs[:r1], kwargs[:s_thresh], prodFunc)
-        end
+        CertificationCost(as_MVector(kwargs[:r0], n), as_MVector(kwargs[:r1], n), as_MVector(kwargs[:s_thresh], n), prodFunc)
     elseif haskey(kwargs, :rs) && haskey(kwargs, :rp)
-        FixedUnitCost2(as_SVector(kwargs[:rs], n), as_SVector(kwargs[:rp], n))
+        FixedUnitCost2(as_MVector(kwargs[:rs], n), as_MVector(kwargs[:rp], n))
+    elseif haskey(kwargs, :r) && haskey(kwargs, :δ) && haskey(kwargs, :s_thresh)
+        PenaltyCost(as_MVector(kwargs[:r], n), as_MVector(kwargs[:δ], n), as_MVector(kwargs[:s_thresh], n), prodFunc)
     elseif haskey(kwargs, :r)
-        FixedUnitCost(as_SVector(kwargs[:r], n))
+        FixedUnitCost(as_MVector(kwargs[:r], n))
     else
         default_costFunc
     end

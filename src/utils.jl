@@ -20,6 +20,15 @@ function as_SVector(x::AbstractVector, n::Int)
     return SVector{n, Float64}(x)
 end
 
+function as_MVector(x::Real, n::Int)
+    x = Float64(x)
+    return MVector{n, Float64}(fill(x, n))
+end
+
+function as_MVector(x::AbstractVector, n::Int)
+    return MVector{n, Float64}(x)
+end
+
 
 # Helpers for combining arrays
 

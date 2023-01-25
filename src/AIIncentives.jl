@@ -19,6 +19,7 @@ export
     FixedUnitCost2,
     LinearCost,
     CertificationCost,
+    PenaltyCost,
 
     AbstractProblem,
     Problem,
