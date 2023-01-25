@@ -166,12 +166,40 @@ end
 
 function cost(c::CertificationCost, Xs, Xp)
     (s, _) = c.prodFunc(Xs, Xp)
-    qualifies = s .< c.s_thresh
+    qualifies = s .>= c.s_thresh
     return (c.r1 .* qualifies .+ c.r0 .* (1 .- qualifies)) .* (Xs .+ Xp)
 end
 
 function is_symmetric(c::CertificationCost)
     return all(c.r0[1] .== c.r0[2:end]) && all(c.r1[1] .== c.r1[2:end]) && all(c.s_thresh[1] .== c.s_thresh[2:end])
+end
+
+
+"""
+Same as certification cost, but discount is now applied if safety is greater than avg. of competitors' safety by some margin δ
+"""
+struct RelativeSafetyCertificationCost{N} <: CostFunc{N}
+    r0::MVector{N, Float64}
+    r1::MVector{N, Float64}
+    δ::MVector{N, Float64}
+    prodFunc::ProdFunc{N}
+end
+
+function cost(c::RelativeSafetyCertificationCost, i::Int, Xs, Xp)
+    (s, _) = c.prodFunc(Xs, Xp)
+    r = s[i] >= mean([s[1:i-1]; s[i+1:end]]) + c.δ[i] ? c.r1[i] : c.r0[i]
+    return r * (Xs[i] + Xp[i])
+end
+
+function cost(c::RelativeSafetyCertificationCost, Xs, Xp)
+    (s, _) = c.prodFunc(Xs, Xp)
+    s_mat = repeat(s, 1, length(s)); s_mat[diagind(s_mat)] .= 0.
+    qualifies = s .>= mean(s_mat, 1) .+ c.δ
+    return (c.r1 .* qualifies .+ c.r0 .* (1 .- qualifies)) .* (Xs .+ Xp)
+end
+
+function is_symmetric(c::RelativeSafetyCertificationCost)
+    return all(c.r0[1] .== c.r0[2:end]) && all(c.r1[1] .== c.r1[2:end]) && all(c.δ[1] .== c.δ[2:end])
 end
 
 
