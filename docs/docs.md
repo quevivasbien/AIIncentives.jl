@@ -219,15 +219,11 @@ To see what options are available, take a look at the fields in the `SolverOptio
 
 The other methods you can use are the following:
 
-* `method = :scatter` runs the iterating method with multiple, randomly-selected, starting points. The returned `SolverResult` will contain the solutions from each of those starting points. (Ideally, the solutions should all be the same.) This is typically just helpful for figuring out if solutions are sensitive to the starting point.
-
 * `method = :mixed` runs a variation of the iterating method that attempts to maximize the best responses over a *history* of strategies. If the size of that history is large enough and the solver is run for enough iterations, the result should be a sample from a mixed strategy Nash equilibrium. You can control the history size by setting the `n_points` keyword argument. For example,
-    ```julia
-    solve(problem, method = :mixed, n_points = 100)
-    ```
-    will return a sample of size 100 from a (proposed) mixed-strategy equilibrium for `problem`. Note that this method can be very slow, but this is the only method that can give you mixed-strategy solutions.
-
-* `method = :hybrid` starts by attempting to find a solution with the basic iterating method. If that fails, it will call `solve` again using `method = :mixed`; however, it will still only accept a pure-strategy solution -- this is helpful for finding some equilibria that the basic iterating method can't find. If this method fails, then it's likely that the only solutions are mixed-strategy equilibria.
+```julia
+solve(problem, method = :mixed)
+```
+will return a sample from a (proposed) mixed-strategy equilibrium for `problem`. Note that this method can be very slow, but this is the only method that can give you mixed-strategy solutions.
 
 ## Scenarios
 

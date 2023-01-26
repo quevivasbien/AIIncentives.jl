@@ -29,26 +29,6 @@ function SolverResult(
     )
 end
 
-function prune_duplicates(results::Vector{SolverResult{N}}; atol = 1e-6, rtol=5e-2) where {N}
-    dups = Vector{Int}()
-    unique = Vector{Int}()
-    n_results = length(results)
-    for i in 1:n_results
-        if i in dups
-            continue
-        end
-        strats1 =  hcat(results[i].Xs, results[i].Xp)
-        for j in (i+1):n_results
-            strats2 = hcat(results[j].Xs, results[j].Xp)
-            if isapprox(strats1, strats2; atol = atol, rtol = rtol)
-                push!(dups, j)
-            end
-        end
-        push!(unique, i)
-    end
-    return results[unique]
-end
-
 function SolverResult(problem::AbstractProblem{N}, success::Bool, Xs::AbstractVector, Xp::AbstractVector, fill = true) where {N}
     Xs = SVector{N, Float64}(Xs)
     Xp = SVector{N, Float64}(Xp)
@@ -106,4 +86,26 @@ function print(result::SolverResult)
     println("p: ", result.p)
     println("σ: ", result.σ)
     println("payoffs: ", result.payoffs, '\n')
+end
+
+
+"""
+For results of solve_mixed, draws results from equilibrium distribution
+
+X has shape (n, 2, t) where t is number of samples used in solve (= options.n_points, not the same as n_samples)
+"""
+function sample_from(problem::AbstractProblem, X::Array{Float64, 3}, n_samples = 100)
+    (n, _, t) = size(X)
+    samples = [
+        begin
+            indices = rand(1:t, n)
+            [X[i, 1, indices[i]] for i in 1:n], [X[i, 2, indices[i]] for i in 1:n]
+        end
+        for _ in 1:n_samples
+    ]
+
+    [
+        SolverResult(problem, true, xs, xp)
+        for (xs, xp) in samples
+    ]
 end

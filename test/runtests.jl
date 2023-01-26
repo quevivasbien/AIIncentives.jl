@@ -11,9 +11,6 @@ function test_solve()
     println("With `solve_mixed`:")
     solve(problem, method = :mixed, verbose = true)
     
-    println("With `solve_hybrid`:")
-    solve(problem, method = :hybrid, verbose = true)
-    
     return
 end
 

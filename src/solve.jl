@@ -6,7 +6,8 @@ const EPSILON = 1e-8  # small number to help numerical stability in some places
 # iter_algo: Optim solver to use for each player's iterated optimization
 # iter_options: Optim.Options provided to Optim solver
 # init_guess: initial guess for the solution; if nothing, init points are drawn from LogNormal(init_mu, init_sigma)
-# n_points: number of points to use with scatter and mixed methods
+# n_points: number of points to use with mixed method (solve_mixed)
+# n_mixed_samples: number of samples to return from solve_mixed
 # init_mu: mean of initial guess distribution
 # init_sigma: standard deviation of initial guess distribution
 # verbose: whether to print extra information
@@ -16,11 +17,12 @@ const EPSILON = 1e-8  # small number to help numerical stability in some places
 # callback: function to call after each iteration; takes in the current strategy
 Base.@kwdef struct SolverOptions{T <: AbstractFloat}
     tol::T = 1e-6
-    max_iters::Int = 100
+    max_iters::Int = 25
     iter_algo::Optim.AbstractOptimizer = NelderMead()
     iter_options::Optim.Options = Optim.Options(x_reltol = 1e-8, f_reltol = 1e-8, iterations = 500)
     init_guess::Union{T, Nothing} = nothing
-    n_points::Int = 4
+    n_points::Int = 10
+    n_mixed_samples::Int = 100
     init_mu::T = -1.
     init_sigma::T = 0.1
     verbose::Bool = false
@@ -238,41 +240,16 @@ function solve_iters(
     end
 end
 
-## "scatter" iterating method:
-# Runs iter_solve from multiple init points and compares results
-
-function solve_scatter(
-    problem::AbstractProblem{N},
-    options = SolverOptions()
-) where {N}
-    # draw init points from log-normal distribution
-    results = SolverResult[]
-    Threads.@threads for i in 1:options.n_points
-        result = solve_iters(
-            problem,
-            options
-        )
-        if result.success
-            push!(results, result)
-        end
-    end
-    if length(results) == 0
-        println("None of the solver iterations converged.")
-        return [get_null_result(N)]
-    end
-    return results
-end
-
 
 ## Solver for mixed strategy equilibria
-# Runs iterating solver over history of run
+# Runs iterating solver over history of runs
 
 function single_mixed_iter_for_i(problem, history, i, init_guess, options = SolverOptions())
     objs = [get_func(problem, i, history[:, :, j]) for j in axes(history, 3)]
     obj_(x) = sum(obj(exp.(x)) for obj in objs)
     # if init_guess is zero-effort, try breaking out
     if all(init_guess .== 0.)
-        init_guess = exp.(options.init_mu .+ options.init_sigma .* randn(2))
+        init_guess = exp.(options.init_mu .+ options.init_sigma .* @MVector randn(2))
     end
     try
         res = optimize(
@@ -283,9 +260,10 @@ function single_mixed_iter_for_i(problem, history, i, init_guess, options = Solv
             options.iter_options
         )
         # check the zero-input payoff
-        zero_payoff = sum(obj([0., 0.]) for obj in objs)
+        zero_input = @SVector zeros(2)
+        zero_payoff = sum(obj(zero_input) for obj in objs)
         if zero_payoff > -Optim.minimum(res)
-            return [0., 0.]
+            return zero_input
         else
             return exp.(Optim.minimizer(res))
         end
@@ -301,7 +279,7 @@ function single_mixed_iter_for_i(problem, history, i, init_guess, options = Solv
 end
 
 function single_mixed_iter(problem::AbstractProblem{N}, history, init_guess, options = SolverOptions()) where {N}
-    new_strat = Array{Float64}(undef, N, 2)
+    new_strat = similar(init_guess)
     for i in 1:N
         new_strat[i, :] = single_mixed_iter_for_i(problem, history, i, init_guess[i, :], options)
     end
@@ -318,6 +296,7 @@ end
 # computes expected payoffs for each player given the distibution of strategies `history`
 # used in `solve_mixed` to determine when convergence has been reached
 function expected_payoffs(problem, history)
+    # todo: this is wrong. should be sampling from distribution
     sum(
         payoffs(problem, history[:, 1, t], history[:, 2, t])
         for t in axes(history, 3)
@@ -338,68 +317,27 @@ function solve_mixed(
         for t in 1:options.n_points
             # on each iter, solve to maximize average payoff given current history
             # replace one of the history entries with new optimum
-            new_history[:, :, t] = single_mixed_iter(problem, history, history[:, :, t], options)
+            new_init = exp.(options.init_mu .+ options.init_sigma .* @MArray randn(N, 2))
+            new_history[:, :, t] = single_mixed_iter(problem, history, new_init, options)
         end
         if !isnothing(options.callback)
             options.callback(new_history)
         end
         # todo: this might never trigger when strategy is mixed, since it compares the entire history, which fluctuates
         # could try comparing some statistics about the distribution instead
-        if all(isapprox.(
-            expected_payoffs(problem, new_history), expected_payoffs(problem, history),
-            atol = EPSILON, rtol = options.tol
-        ))
-            if options.verbose
-                println("Exited on iteration $i")
-            end
-            return results_from_history(problem, new_history, options)
-        end
+        # if all(isapprox.(
+        #     expected_payoffs(problem, new_history), expected_payoffs(problem, history),
+        #     atol = EPSILON, rtol = options.tol
+        # ))
+        #     if options.verbose
+        #         println("Exited on iteration $i")
+        #     end
+        #     return results_from_history(problem, new_history, options)
+        # end
         history = new_history
     end
-    return results_from_history(problem, history, options)
-end
-
-
-# HYBRID METHOD (Runs solve_iter, then solve_mixed if that is unsuccessful. Finds only pure strategies.)
-
-function attempt_mixed(problem::Problem{N}, options) where {N}
-    mixed_sol = solve_mixed(problem, SolverOptions(options))
-    if (
-        mixed_sol.success
-        && slices_approx_equal(log.(mixed_sol.Xs), 1, EPSILON, sqrt(options.tol))
-        && slices_approx_equal(log.(mixed_sol.Xp), 1, EPSILON, sqrt(options.tol))
-    )
-        Xs = mean(hcat((sol.Xs for sol in mixed_sol)...), 1)
-        Xp = mean(hcat(sol.Xp for sol in mixed_sol)..., 1)
-        return SolverResult(problem, true, Xs, Xp)
-    elseif options.retries > 0
-        if options.verbose
-            println("solve_mixed failed. Retrying...")
-        end
-        return attempt_mixed(problem, SolverOptions(options, retries = options.retries - 1))
-    else
-        if options.verbose
-            println("solve_mixed also failed")
-            println("| solution was Xs = $(mixed_sol.Xs), Xp = $(mixed_sol.Xp)")
-            println("∟ returning null result")
-        end
-        return get_null_result(N)
-    end
-end
-
-function solve_hybrid(
-    problem::Problem,
-    options = SolverOptions(n_points = 2)
-)
-    iter_sol = solve_iters(problem, options)
-    if iter_sol.success
-        return iter_sol
-    end
-
-    if options.verbose
-        println("solve_iters failed, trying mixed solver")
-    end
-    return attempt_mixed(problem, options)
+    # return results_from_history(problem, history, options)
+    sample_from(problem, history, options.n_mixed_samples)
 end
 
 
@@ -407,14 +345,8 @@ end
 function solve(problem::Problem, method::Symbol, options)
     solve_func = if method == :iters
         solve_iters
-    elseif method == :roots
-        solve_roots
-    elseif method == :scatter
-        solve_scatter
     elseif method == :mixed
         solve_mixed
-    elseif method == :hybrid
-        solve_hybrid
     else
         throw(ArgumentError("Invalid method $method"))
     end

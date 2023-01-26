@@ -113,21 +113,26 @@ function f(prodFunc::ProdFunc, i::Int, Xs::Number, Xp::Number)
     return s, p
 end
 
+function f(prodFunc::ProdFunc, i::Int, X::AbstractVector)
+    return f(prodFunc, i, X[1], X[2])
+end
+
 # allow direct calling of prodFunc
-(prodFunc::ProdFunc)(i::Int, Xs::Number, Xp::Number) = f(prodFunc, i, Xs, Xp)
+(prodFunc::ProdFunc)(i::Int, Xs, Xp) = f(prodFunc, i, Xs, Xp)
+(prodFunc::ProdFunc)(i::Int, X) = f(prodFunc, i, X)
 
-
-function f(prodFunc::ProdFunc, Xs::SVector, Xp::SVector)
+function f(prodFunc::ProdFunc, Xs::AbstractVector, Xp::AbstractVector)
     p = prodFunc.B .* Xp.^prodFunc.β
     s = prodFunc.A .* Xs.^prodFunc.α .* p.^(-prodFunc.θ)
     return s, p
 end
 
-function f(prodFunc::ProdFunc{N}, Xs::AbstractVector, Xp::AbstractVector) where {N}
-    return f(prodFunc, SVector{N}(Xs), SVector{N}(Xp))
+function f(prodFunc::ProdFunc, X::AbstractMatrix)
+    return f(prodFunc, X[:, 1], X[:, 2])
 end
 
 (prodFunc::ProdFunc)(Xs, Xp) = f(prodFunc, Xs, Xp)
+(prodFunc::ProdFunc)(X) = f(prodFunc, X)
 
 function is_symmetric(prodFunc::ProdFunc{N}) where {N}
     all(

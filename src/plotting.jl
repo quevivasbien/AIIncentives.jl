@@ -63,20 +63,20 @@ function get_values_for_scatterplot(results::Vector{Vector{SolverResult}}, xvals
     end
     if take_avg
         xvals_ = [mean(x) for x in xvals]
-        Xs = hcat((mean(hcat((s.Xs for s in r)...), 2) for r in results)...) |> transpose
-        Xp = hcat((mean(hcat((s.Xp for s in r)...), 2) for r in results)...) |> transpose
-        s = hcat((mean(hcat((s.s for s in r)...), 2) for r in results)...) |> transpose
-        p = hcat((mean(hcat((s.p for s in r)...), 2) for r in results)...) |> transpose
-        payoffs = hcat((mean(hcat((s.payoffs for s in r)...), 2) for r in results)...) |> transpose
+        Xs = hcat((mean(hcat((collect(s.Xs) for s in r)...), 2) for r in results)...) |> transpose
+        Xp = hcat((mean(hcat((collect(s.Xp) for s in r)...), 2) for r in results)...) |> transpose
+        s = hcat((mean(hcat((collect(s.s) for s in r)...), 2) for r in results)...) |> transpose
+        p = hcat((mean(hcat((collect(s.p) for s in r)...), 2) for r in results)...) |> transpose
+        payoffs = hcat((mean(hcat((collect(s.payoffs) for s in r)...), 2) for r in results)...) |> transpose
         total_safety = [mean([s.σ for s in r]) for r in results]
         return xvals_, Xs, Xp, s, p, total_safety, payoffs
     else
         xvals_ = vcat(xvals...)
-        Xs = hcat((s.Xs for r in results for s in r)...) |> transpose
-        Xp = hcat((s.Xp for r in results for s in r)...) |> transpose
-        s = hcat((s.s for r in results for s in r)...) |> transpose
-        p = hcat((s.p for r in results for s in r)...) |> transpose
-        payoffs = hcat((s.payoffs for r in results for s in r)...) |> transpose
+        Xs = hcat((collect(s.Xs) for r in results for s in r)...) |> transpose
+        Xp = hcat((collect(s.Xp) for r in results for s in r)...) |> transpose
+        s = hcat((collect(s.s) for r in results for s in r)...) |> transpose
+        p = hcat((collect(s.p) for r in results for s in r)...) |> transpose
+        payoffs = hcat((collect(s.payoffs) for r in results for s in r)...) |> transpose
         total_safety = [s.σ for r in results for s in r]
         return xvals_, Xs, Xp, s, p, total_safety, payoffs
     end

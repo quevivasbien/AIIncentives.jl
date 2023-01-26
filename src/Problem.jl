@@ -10,8 +10,8 @@ abstract type AbstractProblem{N} end
 
 (problem::AbstractProblem)(Xs::AbstractVector, Xp::AbstractVector) = payoffs(problem, Xs, Xp)
 
-function get_func(problem::AbstractProblem, i::Int, strats::AbstractArray)
-    strats_ = deepcopy(strats)
+function get_func(problem::AbstractProblem{N}, i::Int, strats::AbstractArray) where N
+    strats_ = MMatrix{N, 2}(deepcopy(strats))
     function func(x)
         strats_[i, :] = x
         return -payoff(problem, i, strats_[:, 1], strats_[:, 2])
