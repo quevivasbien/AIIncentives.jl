@@ -94,7 +94,7 @@ For results of solve_mixed, draws results from equilibrium distribution
 
 X has shape (n, 2, t) where t is number of samples used in solve (= options.n_points, not the same as n_samples)
 """
-function sample_from(problem::AbstractProblem, X::Array{Float64, 3}, n_samples = 100)
+function sample_from(problem::AbstractProblem, X::AbstractArray, n_samples = 100)
     (n, _, t) = size(X)
     samples = [
         begin

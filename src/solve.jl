@@ -244,16 +244,19 @@ end
 ## Solver for mixed strategy equilibria
 # Runs iterating solver over history of runs
 
-function single_mixed_iter_for_i(problem, history, i, init_guess, options = SolverOptions())
-    objs = [get_func(problem, i, history[:, :, j]) for j in axes(history, 3)]
-    obj_(x) = sum(obj(exp.(x)) for obj in objs)
+function single_mixed_iter_for_i(problem::Problem{N}, history, i, init_guess::MVector, options = SolverOptions()) where {N}
+    hist_copy = deepcopy(history)
+    obj = function(x)
+        hist_copy[i, :, :] .= exp.(x)
+        -sum(payoff(problem, i, view(hist_copy, :, 1, t), view(hist_copy, :, 2, t)) for t in axes(hist_copy, 3))
+    end
     # if init_guess is zero-effort, try breaking out
-    if all(init_guess .== 0.)
+    if iszero(init_guess)
         init_guess = exp.(options.init_mu .+ options.init_sigma .* @MVector randn(2))
     end
     try
         res = optimize(
-            obj_,
+            obj,
             # jac_!,
             log.(init_guess),
             options.iter_algo,
@@ -261,7 +264,7 @@ function single_mixed_iter_for_i(problem, history, i, init_guess, options = Solv
         )
         # check the zero-input payoff
         zero_input = @SVector zeros(2)
-        zero_payoff = sum(obj(zero_input) for obj in objs)
+        zero_payoff = obj(zero_input)
         if zero_payoff > -Optim.minimum(res)
             return zero_input
         else
@@ -278,7 +281,7 @@ function single_mixed_iter_for_i(problem, history, i, init_guess, options = Solv
     end
 end
 
-function single_mixed_iter(problem::AbstractProblem{N}, history, init_guess, options = SolverOptions()) where {N}
+function single_mixed_iter(problem::AbstractProblem{N}, history::MArray, init_guess::MMatrix, options = SolverOptions()) where {N}
     new_strat = similar(init_guess)
     for i in 1:N
         new_strat[i, :] = single_mixed_iter_for_i(problem, history, i, init_guess[i, :], options)
@@ -286,29 +289,22 @@ function single_mixed_iter(problem::AbstractProblem{N}, history, init_guess, opt
     return new_strat
 end
 
-function results_from_history(problem, history, options)
-    [
-        SolverResult(problem, true, history[:, 1, t], history[:, 2, t])
-        for t in 1:options.n_points
-    ]
-end
-
 # computes expected payoffs for each player given the distibution of strategies `history`
 # used in `solve_mixed` to determine when convergence has been reached
-function expected_payoffs(problem, history)
-    # todo: this is wrong. should be sampling from distribution
-    sum(
-        payoffs(problem, history[:, 1, t], history[:, 2, t])
-        for t in axes(history, 3)
-    ) ./ size(history, 3)
-end
+# function expected_payoffs(problem, history)
+#     # todo: this is wrong. should be sampling from distribution
+#     sum(
+#         payoffs(problem, history[:, 1, t], history[:, 2, t])
+#         for t in axes(history, 3)
+#     ) ./ size(history, 3)
+# end
 
 function solve_mixed(
     problem::Problem{N},
     options = SolverOptions()
 ) where {N}
     # draw init points from log-normal distribution
-    history = exp.(options.init_mu .+ options.init_sigma .* randn(N, 2, options.n_points))
+    history = exp.(options.init_mu .+ options.init_sigma .* @MArray randn(N, 2, options.n_points))
     if !isnothing(options.callback)
         options.callback(history)
     end

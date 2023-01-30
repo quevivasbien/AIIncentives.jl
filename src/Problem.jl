@@ -218,7 +218,7 @@ function payoff(problem::Problem{N}, i::Int, Xs::AbstractVector, Xp::AbstractVec
     (s, p) = problem.prodFunc(Xs, Xp)
     proba_win = problem.csf(p)  # probability that each player wins
     (pf_win, pf_lose) = problem.payoffFunc(i, p[i])  # payoffs if player i wins/loses
-    payoffs_ = [(j == i) ? pf_win : pf_lose for j in 1:N]
+    payoffs_ = SVector{N}([(j == i) ? pf_win : pf_lose for j in 1:N])
     σis = problem.riskFunc(s)  # vector of proba(safe) conditional on each player winning
     cond_σ = proba_win .* σis
     if problem.payoffFunc isa PayoffOnDisaster && problem.payoffFunc.whogets[i]

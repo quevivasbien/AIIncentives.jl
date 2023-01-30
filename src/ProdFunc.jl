@@ -113,6 +113,7 @@ function f(prodFunc::ProdFunc, i::Int, Xs::Number, Xp::Number)
     return s, p
 end
 
+# call with a vector of inputs [Xs, Xp]
 function f(prodFunc::ProdFunc, i::Int, X::AbstractVector)
     return f(prodFunc, i, X[1], X[2])
 end
@@ -127,6 +128,7 @@ function f(prodFunc::ProdFunc, Xs::AbstractVector, Xp::AbstractVector)
     return s, p
 end
 
+# call with a matrix of inputs [Xs Xp]
 function f(prodFunc::ProdFunc, X::AbstractMatrix)
     return f(prodFunc, X[:, 1], X[:, 2])
 end
