@@ -247,7 +247,7 @@ end
 function single_mixed_iter_for_i(problem::Problem{N}, history, i, init_guess::MVector, options = SolverOptions()) where {N}
     hist_copy = deepcopy(history)
     obj = function(x)
-        hist_copy[i, :, :] .= exp.(x)
+        hist_copy[i, :, :] .= x
         -sum(payoff(problem, i, view(hist_copy, :, 1, t), view(hist_copy, :, 2, t)) for t in axes(hist_copy, 3))
     end
     # if init_guess is zero-effort, try breaking out
@@ -256,7 +256,7 @@ function single_mixed_iter_for_i(problem::Problem{N}, history, i, init_guess::MV
     end
     try
         res = optimize(
-            obj,
+            (x) -> obj(exp.(x)),
             # jac_!,
             log.(init_guess),
             options.iter_algo,
@@ -333,6 +333,7 @@ function solve_mixed(
         history = new_history
     end
     # return results_from_history(problem, history, options)
+    @show history
     sample_from(problem, history, options.n_mixed_samples)
 end
 
