@@ -333,7 +333,6 @@ function solve_mixed(
         history = new_history
     end
     # return results_from_history(problem, history, options)
-    @show history
     sample_from(problem, history, options.n_mixed_samples)
 end
 
